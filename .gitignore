@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# No subir los datasets procesados ni los modelos (son pesados y se generan ejecutando main.py)
+data/processed/
+models/
+outputs/logs/
+outputs/figures/
+outputs/reports/
+*.xlsx
+*.keras
+*.joblib
