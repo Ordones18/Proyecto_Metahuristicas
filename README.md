@@ -98,31 +98,49 @@ Proyecto/
 
 ## 🚀 Instrucciones de Configuración y Ejecución
 
-### 1. Prerrequisitos e Instalación
-Clone el repositorio y asegure tener instalado Python 3.10 o superior (el pipeline fue testeado con Python 3.12). Instale los paquetes requeridos:
+## 🔄 Guía de Reproducción Paso a Paso
 
-```bash
-# Instalar dependencias
-pip install -r requirements.txt
-```
+Para reproducir fielmente este proyecto y todos sus resultados científicos, siga detalladamente los siguientes pasos:
 
-### 2. Ejecutar el Pipeline de Aprendizaje Completo
-Para procesar la data cruda, realizar el análisis exploratorio de datos, correr el algoritmo genético, entrenar la MLP final y generar las curvas e interpretaciones globales:
+### Paso 1: Clonar el Repositorio e Instalar Dependencias
+1. Abra una terminal en su máquina local.
+2. Clone este repositorio de GitHub:
+   ```bash
+   git clone https://github.com/Ordones18/Proyecto_Metahuristicas.git
+   cd Proyecto_Metahuristicas
+   ```
+3. Instale las dependencias de Python fijadas en `requirements.txt`:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-python main.py
-```
+### Paso 2: Colocar el Dataset
+1. Asegúrese de colocar el dataset Excel original con el nombre `mdi_personasdesaparecidas_pm_2017_2025 (1).xlsx` directamente en el directorio raíz del proyecto.
+   *Nota: Las rutas y dependencias están enlazadas a esta ubicación por defecto en `src/config.py`.*
 
-*Los resultados y métricas se escribirán en `outputs/` y los modelos finales se guardarán en `models/`.*
+### Paso 3: Ejecutar el Pipeline Completo
+1. Corra el orquestador principal del proyecto:
+   ```bash
+   python main.py
+   ```
+2. **Qué sucede internamente durante la ejecución:**
+   - **Fase 1 (ETL)**: Carga y depura los datos crudos, eliminando duplicados e inconsistencias. Filtra las 8 variables de Data Leakage, genera variables temporales y de antigüedad, codifica las características nominales/ordinales y divide la data de forma estratificada (Train 70%, Val 15%, Test 15%). Compara `StandardScaler` y `MinMaxScaler` seleccionando el óptimo, aplica balanceo SMOTE al set de entrenamiento y almacena los sets limpios en `data/processed/`.
+   - **Fase 2 (EDA)**: Produce automáticamente 10 gráficos interactivos y estáticos de distribuciones espaciales, temporales y demográficas, guardándolos en `outputs/figures/`.
+   - **Fase 3 (Selección de Variables)**: Ejecuta los 5 algoritmos de filtrado e importancia (Correlation, Permutation, SHAP, RFE y Mutual Information). Genera una tabla de votación por consenso en `outputs/reports/` y guarda el set final recortado.
+   - **Fase 4 (Modelo Base)**: Realiza una búsqueda automática preliminar de arquitecturas y entrena el modelo MLP Base con callbacks activos de control de sobreajuste.
+   - **Fase 5 (Modelo Híbrido)**: Corre el Algoritmo Genético optimizado en DEAP comparando tasas de mutación y evolución del fitness (Macro F1-score). Entrena el modelo MLP híbrido final con la arquitectura sintonizada.
+   - **Fase 6 (Evaluación)**: Genera las métricas de rendimiento comparativas en Test set, dibuja matrices de confusión y curvas ROC/PR comparativas, y ejecuta la prueba estadística de McNemar para certificar la significancia del modelo.
+   - **Fase 7 (Interpretabilidad)**: Evalúa los valores SHAP globales (beeswarm summary) y locales con LIME para casos de ejemplo.
 
-### 3. Iniciar la Aplicación Web (Streamlit)
-Una vez finalizado el entrenamiento, lance el dashboard interactivo:
-
-```bash
-streamlit run app/app.py
-```
+### Paso 4: Iniciar la Aplicación Streamlit
+1. Lance el servidor del dashboard interactivo:
+   ```bash
+   streamlit run app/app.py
+   ```
+2. Interactúe con las diferentes pestañas de KPIs, mapas geográficos de calor de Ecuador, estimaciones de riesgo predictivo en tiempo real con explicación local LIME, y descargue el reporte académico formal generado automáticamente en PDF.
 
 ---
 
 ## 📄 Publicación IEEE
 El reporte académico formal que resume la introducción, metodología, experimentación y conclusiones en formato de artículo científico se encuentra disponible en [outputs/reports/IEEE_scientific_article.md](outputs/reports/IEEE_scientific_article.md).
+
