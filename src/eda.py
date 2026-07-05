@@ -2,27 +2,33 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
 import folium
 from folium.plugins import HeatMap, MarkerCluster
 
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
+
 # Asegurar que el directorio src está en el path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.config import RANDOM_SEED, RAW_DATA_PATH, FIGURES_DIR
 
-# Configurar el estilo de matplotlib/seaborn
-sns.set_theme(style="whitegrid")
-plt.rcParams.update({
-    'font.size': 12,
-    'axes.labelsize': 14,
-    'axes.titlesize': 16,
-    'xtick.labelsize': 12,
-    'ytick.labelsize': 12,
-    'figure.titlesize': 18
-})
+# Configurar el estilo de matplotlib/seaborn si está disponible
+if HAS_PLOTTING:
+    sns.set_theme(style="whitegrid")
+    plt.rcParams.update({
+        'font.size': 12,
+        'axes.labelsize': 14,
+        'axes.titlesize': 16,
+        'xtick.labelsize': 12,
+        'ytick.labelsize': 12,
+        'figure.titlesize': 18
+    })
 
 def generate_eda_plots():
     """
@@ -50,6 +56,14 @@ def generate_eda_plots():
     df['lat_clean'] = pd.to_numeric(df['latitud_desaparicion'].astype(str).str.replace(',', '.'), errors='coerce')
     df['lon_clean'] = pd.to_numeric(df['longitud_desaparicion'].astype(str).str.replace(',', '.'), errors='coerce')
     
+    # Generar el reporte científico escrito siempre
+    write_eda_report_file(df)
+    
+    if not HAS_PLOTTING:
+        print("  - [EDA] Omitiendo generación de gráficos estáticos por incompatibilidad de directivas de seguridad (Pillow DLL block).")
+        print("[EDA] ¡Pipeline EDA completado (modo sin gráficos)!\n")
+        return
+        
     # --- 1. Distribución de la Variable Objetivo ---
     print("  - Generando gráfico de variable objetivo...")
     fig, ax = plt.subplots(1, 2, figsize=(16, 7))
@@ -204,9 +218,6 @@ def generate_eda_plots():
     m.save(os.path.join(FIGURES_DIR, '10_mapa_calor_desapariciones.html'))
     print("  - Mapa de Folium guardado con éxito.")
     
-    # --- 9. Guardar la descripción científica del EDA ---
-    write_eda_report_file(df)
-    
     print("[EDA] ¡Pipeline EDA completado con éxito! Gráficos guardados en outputs/figures/\n")
 
 
@@ -218,6 +229,11 @@ def write_eda_report_file(df):
     encontrados = (df['situacion_actual'] == 'ENCONTRADO').sum()
     fallecidos = (df['situacion_actual'] == 'FALLECIDO').sum()
     desaparecidos = (df['situacion_actual'] == 'DESAPARECIDO').sum()
+    
+    # Manejar fechas con seguridad
+    fechas_rep = pd.to_datetime(df['fecha_desaparicion'], errors='coerce').dropna()
+    fecha_min = fechas_rep.min().strftime('%Y-%m-%d') if not fechas_rep.empty else "N/A"
+    fecha_max = fechas_rep.max().strftime('%Y-%m-%d') if not fechas_rep.empty else "N/A"
     
     report_text = f"""# ANÁLISIS EXPLORATORIO DE DATOS (EDA) - REPORTE CIENTÍFICO
 
@@ -239,7 +255,7 @@ Este documento presenta el análisis exploratorio detallado del dataset de perso
 
 ## 3. Distribución Geográfica y Temporal
 - **Provincia con mayor incidencia**: {df['provincia'].value_counts().index[0]} ({df['provincia'].value_counts().values[0]:,} casos).
-- **Rango temporal**: Desde {df['fecha_desaparicion'].min().strftime('%Y-%m-%d')} hasta {df['fecha_desaparicion'].max().strftime('%Y-%m-%d')}.
+- **Rango temporal**: Desde {fecha_min} hasta {fecha_max}.
 - **Pico histórico**: Se observa una tendencia irregular de desapariciones mensuales con picos característicos en ciertos meses del año, posiblemente ligados a festividades, periodos escolares o factores socioeconómicos estacionales.
 """
     with open(os.path.join(FIGURES_DIR, 'eda_scientific_report.txt'), 'w', encoding='utf-8') as f:

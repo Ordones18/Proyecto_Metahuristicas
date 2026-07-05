@@ -5,14 +5,13 @@ import pandas as pd
 import numpy as np
 import tensorflow as tf
 import joblib
-import matplotlib.pyplot as plt
+import plotly.express as px
 
 # Asegurar que el directorio src está en el path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from src.config import MODELS_DIR
 
-# Configuración de página
-st.set_page_config(page_title="Predicción de Localización", page_icon="🔮", layout="wide")
+
 
 # Estilos CSS
 st.markdown("""
@@ -111,9 +110,13 @@ else:
             trimestre = (mes - 1) // 3 + 1
             # Antigüedad en días relativa a 31-12-2025 (si el año ingresado es posterior, será negativo)
             import datetime
-            fecha_input = datetime.date(int(anio), int(mes), int(dia))
-            ref_date = datetime.date(2025, 12, 31)
-            antiguedad_dias = (ref_date - fecha_input).days
+            try:
+                fecha_input = datetime.date(int(anio), int(mes), int(dia))
+                ref_date = datetime.date(2025, 12, 31)
+                antiguedad_dias = (ref_date - fecha_input).days
+            except ValueError:
+                st.error("La fecha seleccionada es inválida (por ejemplo, el día no existe en el mes seleccionado). Por favor verifique el día y el mes.")
+                st.stop()
             
         submit_btn = st.form_submit_button("Realizar Predicción")
         
@@ -165,6 +168,9 @@ else:
         # 3. Target Encoding
         encoded_input = target_encoder.transform(encoded_input)
         
+        # Asegurar que el orden de las columnas sea idéntico al visto en el fit del scaler
+        encoded_input = encoded_input[scaler.feature_names_in_]
+        
         # 4. Escalamiento
         scaled_input = pd.DataFrame(scaler.transform(encoded_input), columns=encoded_input.columns)
         
@@ -203,9 +209,28 @@ else:
                     num_features=5
                 )
                 
-                # Renderizar figura LIME
-                fig = exp.as_pyplot_figure()
-                plt.title("Contribución de Variables a la Predicción")
-                plt.tight_layout()
-                st.pyplot(fig)
-                plt.close()
+                # Renderizar explicación local con Plotly en lugar de Matplotlib (para evitar bloqueo de DLL de Pillow)
+                exp_list = exp.as_list()
+                df_exp = pd.DataFrame(exp_list, columns=['Variable', 'Contribucion'])
+                df_exp['Efecto'] = df_exp['Contribucion'].apply(
+                    lambda x: 'Favorece Localización (Positivo)' if x > 0 else 'Favorece No Localización (Negativo)'
+                )
+                fig = px.bar(
+                    df_exp,
+                    x='Contribucion',
+                    y='Variable',
+                    orientation='h',
+                    color='Efecto',
+                    color_discrete_map={
+                        'Favorece Localización (Positivo)': '#4CAF50',
+                        'Favorece No Localización (Negativo)': '#F44336'
+                    },
+                    title="Contribución de Variables a la Predicción"
+                )
+                fig.update_layout(
+                    yaxis={'categoryorder': 'total ascending'},
+                    template="plotly_dark",
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=350
+                )
+                st.plotly_chart(fig, use_container_width=True)

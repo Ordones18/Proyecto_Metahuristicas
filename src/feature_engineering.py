@@ -3,12 +3,17 @@ import sys
 import pandas as pd
 import numpy as np
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import RFE, mutual_info_classif
 from sklearn.inspection import permutation_importance
-import shap
+
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import shap
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
 
 # Asegurar que el directorio src está en el path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -66,33 +71,36 @@ def select_features(n_features_to_select=10):
     votes.loc[top_perm, 'Permutation'] = 1
     
     # --- MÉTODO 3: SHAP (Shapley Additive exPlanations) ---
-    print("  - Ejecutando Método 3: Valores SHAP...")
-    explainer = shap.TreeExplainer(rf)
-    shap_values = explainer.shap_values(X_sample)
-    
-    # Manejar salida multiclase o binaria de SHAP
-    if isinstance(shap_values, list):
-        # Para binario, a veces devuelve lista de dos clases, tomamos la de clase 1
-        shap_val_array = shap_values[1]
-    elif len(shap_values.shape) == 3:
-        shap_val_array = shap_values[:, :, 1]
-    else:
-        shap_val_array = shap_values
+    if HAS_PLOTTING:
+        print("  - Ejecutando Método 3: Valores SHAP...")
+        explainer = shap.TreeExplainer(rf)
+        shap_values = explainer.shap_values(X_sample)
         
-    shap_importances = np.abs(shap_val_array).mean(axis=0)
-    shap_df = pd.DataFrame({'feature': feature_names, 'importance': shap_importances})
-    shap_df = shap_df.sort_values(by='importance', ascending=False)
-    top_shap = shap_df.head(n_features_to_select)['feature'].tolist()
-    votes['SHAP'] = 0
-    votes.loc[top_shap, 'SHAP'] = 1
-    
-    # Guardar gráfico SHAP Summary estático
-    plt.figure(figsize=(10, 6))
-    shap.summary_plot(shap_val_array, X_sample, plot_type="bar", show=False)
-    plt.title('Importancia Global de Variables mediante SHAP', fontsize=14)
-    plt.tight_layout()
-    plt.savefig(os.path.join(FIGURES_DIR, '11_shap_summary_bar.png'), dpi=300)
-    plt.close()
+        # Manejar salida multiclase o binaria de SHAP
+        if isinstance(shap_values, list):
+            # Para binario, a veces devuelve lista de dos clases, tomamos la de clase 1
+            shap_val_array = shap_values[1]
+        elif len(shap_values.shape) == 3:
+            shap_val_array = shap_values[:, :, 1]
+        else:
+            shap_val_array = shap_values
+            
+        shap_importances = np.abs(shap_val_array).mean(axis=0)
+        shap_df = pd.DataFrame({'feature': feature_names, 'importance': shap_importances})
+        shap_df = shap_df.sort_values(by='importance', ascending=False)
+        top_shap = shap_df.head(n_features_to_select)['feature'].tolist()
+        votes['SHAP'] = 0
+        votes.loc[top_shap, 'SHAP'] = 1
+        
+        # Guardar gráfico SHAP Summary estático
+        plt.figure(figsize=(10, 6))
+        shap.summary_plot(shap_val_array, X_sample, plot_type="bar", show=False)
+        plt.title('Importancia Global de Variables mediante SHAP', fontsize=14)
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIGURES_DIR, '11_shap_summary_bar.png'), dpi=300)
+        plt.close()
+    else:
+        print("  - [Feature Selection] Omitiendo Método 3 (SHAP) por incompatibilidad de directiva de seguridad.")
     
     # --- MÉTODO 4: RFE (Recursive Feature Elimination) ---
     print("  - Ejecutando Método 4: RFE (Recursive Feature Elimination)...")
@@ -116,8 +124,9 @@ def select_features(n_features_to_select=10):
     votes['Total_Votes'] = votes.sum(axis=1)
     votes = votes.sort_values(by='Total_Votes', ascending=False)
     
-    # Criterio de Selección: Variables seleccionadas por al menos 3 de los 5 métodos
-    selected_features = votes[votes['Total_Votes'] >= 3].index.tolist()
+    # Criterio de Selección: Variables seleccionadas por al menos 3 métodos (o 2 si SHAP está inactivo)
+    threshold = 3 if HAS_PLOTTING else 2
+    selected_features = votes[votes['Total_Votes'] >= threshold].index.tolist()
     
     # Si por alguna razón quedan menos de 5 variables, tomar las top 5 del ranking
     if len(selected_features) < 5:
@@ -130,17 +139,20 @@ def select_features(n_features_to_select=10):
     joblib.dump(selected_features, os.path.join(MODELS_DIR, 'selected_features.joblib'))
     votes.to_csv(os.path.join(PROCESSED_DATA_DIR, 'feature_votes.csv'))
     
-    # Graficar Consenso de Variables
-    plt.figure(figsize=(12, 6))
-    sns.barplot(x=votes['Total_Votes'], y=votes.index, palette='viridis', hue=votes.index, legend=False)
-    plt.axvline(x=3, color='red', linestyle='--', label='Umbral de Selección (>= 3 votos)')
-    plt.title('Selección de Variables por Consenso de Métodos')
-    plt.xlabel('Número de Votos (Max 5)')
-    plt.ylabel('Característica')
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(os.path.join(FIGURES_DIR, '12_seleccion_consenso.png'), dpi=300)
-    plt.close()
+    # Graficar Consenso de Variables si está disponible
+    if HAS_PLOTTING:
+        plt.figure(figsize=(12, 6))
+        sns.barplot(x=votes['Total_Votes'], y=votes.index, palette='viridis', hue=votes.index, legend=False)
+        plt.axvline(x=threshold, color='red', linestyle='--', label=f'Umbral de Selección (>= {threshold} votos)')
+        plt.title('Selección de Variables por Consenso de Métodos')
+        plt.xlabel('Número de Votos')
+        plt.ylabel('Característica')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIGURES_DIR, '12_seleccion_consenso.png'), dpi=300)
+        plt.close()
+    else:
+        print("  - [Feature Selection] Omitiendo gráfico de consenso por incompatibilidad de directiva de seguridad.")
     
     # Generar datasets recortados con solo las variables seleccionadas
     for name in ['X_train', 'X_val', 'X_test']:

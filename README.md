@@ -1,56 +1,85 @@
 # Predicción de Personas Desaparecidas en Ecuador (2017-2025)
 ## Modelo Híbrido: Redes Neuronales MLP optimizadas mediante Algoritmos Genéticos
 
-Este repositorio contiene el código fuente, la documentación científica y la aplicación web interactiva para la estimación del éxito de localización de personas desaparecidas en el Ecuador. El desarrollo sigue los estándares académicos de publicaciones IEEE.
+Este repositorio contiene la arquitectura de software, el pipeline de datos científico y la interfaz web interactiva para predecir la probabilidad de éxito de localización de personas reportadas como desaparecidas en el Ecuador. La fundamentación técnica y la metodología del proyecto están estructuradas bajo los estándares de publicaciones científicas de la IEEE.
 
 ---
 
-## 🔍 Contexto del Proyecto
+## 🔍 Contexto del Proyecto y Justificación Científica
 
-El conjunto de datos original cuenta con **75,680 registros** y **28 variables** recopiladas de estadísticas oficiales gubernamentales. El objetivo es predecir si una persona reportada como desaparecida será:
-- **Localizada con éxito (Encontrada)** (Clase 1)
-- **No encontrada (Fallecida o en investigación continua)** (Clase 0)
+El dataset original consta de **75,680 registros** oficiales con **28 variables** recopiladas de la Policía Nacional de Ecuador y la Fiscalía General del Estado. El objetivo principal es predecir si una persona será:
+- **Localizada con éxito (Encontrada)** (Clase 1 / Favorable)
+- **No encontrada (Fallecida o con paradero desconocido/en investigación)** (Clase 0 / Desfavorable)
 
-### Desafíos Clave Resueltos:
-1. **Mitigación del Data Leakage (Fuga de Información)**: Se eliminaron 8 variables críticas que solo se registran una vez que la persona ha sido encontrada (`fecha_localizacion`, `dias_solucion`, `motivo_desaparicion`, `estado_desaparecido`, etc.). Esto garantiza la aplicabilidad real del modelo al momento de reportarse el incidente.
-2. **Desbalanceo Crítico de Clases**: La clase mayoritaria (*Encontrado*) representa el ~93.18% de las muestras. Se implementó un balanceo robusto usando técnicas de remuestreo sintético (SMOTE) en el conjunto de entrenamiento.
+### ⚠️ Desafíos Críticos Resueltos:
+1. **Mitigación Rigurosa de Fuga de Información (Data Leakage)**: 
+   En defensas académicas, un error común es entrenar modelos con variables registradas *posteriormente* a la resolución del caso. Se eliminaron de raíz 8 variables redundantes o de fuga:
+   - `fecha_localizacion`, `latitud_localizacion`, `longitud_localizacion`, `provincia_localizacion`, `dias_solucion` (sólo existen cuando ya se halló a la persona).
+   - `motivo_desaparicion`, `motivacion_desaparicion_observada` (se definen en la investigación posterior).
+   - `estado_desaparecido` (se correlaciona directamente con la etiqueta objetivo).
+2. **Desbalanceo Severo de Clases**: 
+   La clase mayoritaria (*Localizada*) representa el **~93.18%** de los datos, lo que sesgaría a un clasificador básico a predecir siempre "Encontrado". Se implementó un pipeline flexible en la etapa ETL que permite alternar entre **SMOTE**, **Submuestreo aleatorio** y **Pesos de Clase (Class Weights)** para balancear el aprendizaje.
+3. **Restricción de Ejecución Local (Pillow DLL Block)**:
+   Debido a directivas locales del sistema que bloquean binarios compilados de Pillow, se diseñó una arquitectura de desacoplamiento de imports que permite que el entrenamiento evolutivo del Algoritmo Genético y la visualización sigan funcionando mediante **Plotly interactivo en memoria (renderizado en el navegador)** sin depender de Matplotlib o SHAP estático.
 
 ---
 
-## 🛠️ Arquitectura del Sistema
+## 🛠️ Arquitectura Híbrida del Sistema
 
-El sistema implementa una arquitectura híbrida inteligente estructurada en 5 fases secuenciales:
+La solución integra un pipeline de Machine Learning estructurado en fases consecutivas:
 
 ```mermaid
 graph TD
-    A[Datos Crudos Excel] --> B[Pipeline ETL & Target Encoding]
-    B --> C[Selección de Variables por Consenso]
-    C --> D[Optimización de MLP mediante Algoritmo Genético - DEAP]
-    D --> E[Entrenamiento de Modelos Base e Híbrido]
-    E --> F[Evaluación Comparativa & Test de McNemar]
-    F --> G[Dashboard Streamlit & Inferencia SHAP/LIME]
+    A[Datos Crudos Excel] --> B[Fase 1: ETL & Codificación de Alta Cardinalidad]
+    B --> C[Fase 2: Selección de Variables por Consenso]
+    C --> D[Fase 3: Optimización Evolutiva - Algoritmo Genético]
+    D --> E[Fase 4: Entrenamiento MLP Híbrido con Pesos de Clase]
+    E --> F[Fase 5: Validación Estadística - Test de McNemar]
+    F --> G[Fase 6: Explicabilidad Local LIME & Dashboard Streamlit]
 ```
 
-1. **ETL Avanzado (`src/etl.py`)**: Depuración de nulos, corrección de coordenadas, codificación ordinal, One-Hot Encoding y Codificación de Objetivos (*Target Encoding*) regularizada para alta cardinalidad.
-2. **Selección de Características por Consenso (`src/feature_engineering.py`)**: Votación de consenso entre 5 metodologías de importancia:
-   - Análisis de Multicolinealidad (Correlación Pearson)
-   - Importancia por Permutación (Permutation Importance)
-   - Explicaciones globales SHAP (Shapley Additive exPlanations)
-   - Eliminación Recursiva de Variables (RFE)
-   - Información Mutua (Mutual Information)
-3. **Modelo Base MLP (`src/model_base.py`)**: Red neuronal densa (Multi-Layer Perceptron) en TensorFlow/Keras con callbacks de monitoreo avanzado.
-4. **Algoritmo Genético Optimizado (`src/model_hybrid.py`)**: Algoritmo evolutivo estructurado en **DEAP** que sintoniza de forma inteligente:
-   - Capas ocultas y número de neuronas
-   - Tasas de Dropout y Learning Rate
-   - Optimizador y funciones de activación
-   - Épocas y Batch Size
-5. **Estadística y Evaluación (`src/evaluation.py` y `src/interpretability.py`)**: Comparación mediante matrices de confusión, curvas ROC/PR, análisis de explicabilidad local LIME, y validación mediante el **Test de McNemar**.
+### 1. ETL y Codificación Avanzada
+- **Corrección Espacial**: Procesamiento de coordenadas (latitud/longitud) corrigiendo separadores decimales erróneos y outliers geográficos en el territorio ecuatoriano.
+- **Codificación de Alta Cardinalidad (Target Encoding Regularizado)**: Variables geográficas de alta resolución (como cantones y circuitos) son codificadas utilizando un *Target Encoder* personalizado con suavizado (smoothing) para evitar el sobreajuste y mapear de forma eficiente variables categóricas complejas.
+- **Codificación Ordinal / One-Hot Encoding**: Aplicada a características estructuradas como género, grupo étnico y rangos de edad.
+
+### 2. Selección de Características por Consenso
+Para evitar el sesgo de seleccionar variables con un único algoritmo, el módulo realiza una **votación por consenso** de 10 características a partir de 5 metodologías independientes:
+- **Análisis de Multicolinealidad (Correlación de Pearson)**
+- **Importancia por Permutación (Permutation Importance)**
+- **Aportaciones de Shapley (SHAP Beeswarm Global)**
+- **Eliminación Recursiva de Características (RFE)**
+- **Información Mutua (Mutual Information)**
+
+### 3. Sintonización Metaheurística (Algoritmo Genético)
+La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas (MLP) es ineficiente y no garantiza óptimos globales en espacios de alta dimensionalidad. Se implementó un **Algoritmo Genético** estructurado en **DEAP**:
+- **Cromosoma**: Representa la arquitectura (capas, neuronas, activación), learning rate, tasa de dropout, batch size, optimizador y épocas.
+- **Operadores**: Selección por Torneo ($k=3$), Cruce de Dos Puntos ($p_x = 0.7$), Mutación Uniforme ($p_m = 0.2$) y Elitismo del mejor individuo.
+- **Función Fitness**: Maximización del **Macro F1-Score** obtenido a través de validación cruzada estratificada sobre el conjunto de entrenamiento.
+
+### 4. Validación Científica y Explicabilidad (XAI)
+- **Significancia Estadística (Test de McNemar)**: Determina si el incremento de rendimiento del modelo híbrido optimizado sobre el MLP base es estadísticamente significativo analizando las tablas de contingencia de predicciones correctas/incorrectas.
+- **Interpretabilidad Local (LIME)**: Rompe el paradigma de la "caja negra" de las redes neuronales, generando regresiones lineales locales que explican visualmente al usuario qué variables individuales (ej. edad, sexo, provincia) aumentaron o disminuyeron la probabilidad de localización en cada predicción en tiempo real.
 
 ---
 
-## 📊 Resultados Científicos Obtenidos
+## ⚖️ Métodos de Balanceo de Clases
 
-| Métrica | MLP Base | MLP Híbrido (GA) | Mejora Relativa |
+- **SMOTE (Remuestreo Sintético)**:
+  - *Funcionamiento*: Genera muestras sintéticas de la clase minoritaria interpolando variables entre vecinos más cercanos.
+  - *Justificación*: Ideal para maximizar el **Recall** (sensibilidad para detectar personas no localizadas) sin desechar registros, incrementando ligeramente el tiempo de cómputo.
+- **Under-sampling (Submuestreo)**:
+  - *Funcionamiento*: Elimina aleatoriamente muestras de la clase mayoritaria hasta lograr una proporción 50/50.
+  - *Justificación*: Recomendado para prototipado rápido y entornos de recursos limitados, a costa de perder información histórica valiosa.
+- **Class Weights (Pesos de Clase)**:
+  - *Funcionamiento*: Multiplica la función de costo (Binary Cross-entropy) asignándole mayor penalización a los errores sobre la clase minoritaria.
+  - *Justificación*: Enfoque matemáticamente limpio y computacionalmente eficiente; entrena sobre el dataset real original sin añadir datos ficticios.
+
+---
+
+## 📊 Resultados Experimentales Registrados
+
+| Métrica | MLP Base (Sintonía Estática) | MLP Híbrido (Optimizado por GA) | Mejora Relativa |
 | :--- | :---: | :---: | :---: |
 | **Accuracy** | 76.36% | **77.90%** | **+2.02%** 🟢 |
 | **F1-Score (Macro)** | 0.5878 | **0.5955** | **+1.31%** 🟢 |
@@ -58,7 +87,7 @@ graph TD
 | **Tiempo de Inferencia** | 0.0298 ms | **0.0239 ms** | **-19.94% (Reducción)** 🟢 |
 | **Tiempo de Entrenamiento** | 78.28 s | **53.34 s** | **-31.86% (Reducción)** 🟢 |
 
-- **Significancia Estadística**: La prueba de McNemar sobre el test set arrojó un p-valor de **$2.11 \times 10^{-15}$**, rechazando rotundamente la hipótesis nula. La superioridad del modelo híbrido optimizado mediante GA es **altamente significativa**.
+- **Resultado del Test de McNemar**: El p-valor obtenido de **$2.11 \times 10^{-15}$** (muy inferior al nivel de significancia de $\alpha = 0.05$) demuestra que la diferencia en el rendimiento predictivo es **altamente significativa**. La optimización metaheurística reduce el sobreajuste y sintoniza una arquitectura más ligera y rápida.
 
 ---
 
@@ -67,29 +96,29 @@ graph TD
 ```
 Proyecto/
 ├── app/
-│   ├── app.py                      # Streamlit Principal (Presentación)
+│   ├── app.py                      # Enrutador principal de la app (Presentación e Inicio integrado)
 │   └── pages/
-│       ├── 01_Dashboard.py         # KPIs, filtros y mapa interactivo Folium
-│       ├── 02_Prediccion.py        # Formulario de inferencia y explicador LIME
-│       ├── 03_Comparacion.py       # Pestañas de rendimiento de entrenamiento
+│       ├── 00_Dashboard.py         # KPIs, filtros y mapa interactivo Folium (No requiere ent.)
+│       ├── 01_Entrenamiento.py     # Consola de entrenamiento interactiva con logs persistentes
+│       ├── 02_Prediccion.py        # Formulario de inferencia y explicador local Plotly-LIME
+│       ├── 03_Comparacion.py       # Gráficos interactivos de curvas de rendimiento (ROC, PR, CM, GA)
 │       └── 04_Reportes.py          # Módulo de exportación PDF/Excel/CSV
 ├── data/
 │   └── processed/                  # Sets de datos resultantes del ETL
 ├── models/                         # Pesos .keras y codificadores .joblib
 ├── outputs/
-│   ├── figures/                    # Gráficos del EDA, ROC, PR y SHAP
-│   ├── logs/                       # Log de ejecución del pipeline
+│   ├── logs/                       # Log de ejecución persistente del pipeline
 │   └── reports/                    # Reportes Excel y Artículo IEEE en Markdown
 ├── src/
 │   ├── config.py                   # Semillas, rutas y espacio de búsqueda del GA
-│   ├── etl.py                      # Limpieza y codificación
+│   ├── etl.py                      # Limpieza, codificación y pesos de clase
 │   ├── eda.py                      # Graficado automático descriptivo
-│   ├── feature_engineering.py      # Filtro de variables por consenso
-│   ├── model_base.py               # Entrenamiento del modelo estático
-│   ├── model_hybrid.py             # Estructuración y corrida de DEAP
+│   ├── feature_engineering.py      # Filtro de variables por consenso y fallback dinámico
+│   ├── model_base.py               # Entrenamiento del modelo estático con logs compactos
+│   ├── model_hybrid.py             # Estructuración y corrida de DEAP con logs compactos
 │   ├── evaluation.py               # Test de McNemar y curvas ROC/PR
-│   └── interpretability.py         # Generación de SHAP y LIME estáticos
-├── main.py                         # Orquestador del pipeline completo
+│   └── interpretability.py         # Explicabilidad local y global
+├── main.py                         # Orquestador del pipeline completo en consola
 ├── requirements.txt                # Dependencias fijadas del proyecto
 └── README.md                       # Documentación principal
 ```
@@ -98,9 +127,7 @@ Proyecto/
 
 ## 🚀 Instrucciones de Configuración y Ejecución
 
-## 🔄 Guía de Reproducción Paso a Paso
-
-Para reproducir fielmente este proyecto y todos sus resultados científicos, siga detalladamente los siguientes pasos:
+Para reproducir este proyecto, entrenar los modelos y explorar los resultados científicos, siga detalladamente los siguientes pasos:
 
 ### Paso 1: Clonar el Repositorio e Instalar Dependencias
 1. Abra una terminal en su máquina local.
@@ -113,34 +140,23 @@ Para reproducir fielmente este proyecto y todos sus resultados científicos, sig
    ```bash
    pip install -r requirements.txt
    ```
+   *Nota: El dataset Excel original `mdi_personasdesaparecidas_pm_2017_2025.xlsx` ya se encuentra precargado en la raíz del repositorio, por lo que no es necesario descargarlo o colocarlo manualmente.*
 
-### Paso 2: Colocar el Dataset
-1. Asegúrese de colocar el dataset Excel original con el nombre `mdi_personasdesaparecidas_pm_2017_2025 (1).xlsx` directamente en el directorio raíz del proyecto.
-   *Nota: Las rutas y dependencias están enlazadas a esta ubicación por defecto en `src/config.py`.*
+### Paso 2: Lanzar la Aplicación Streamlit
+Inicie el servidor de la aplicación web:
+```bash
+streamlit run app/app.py
+```
 
-### Paso 3: Ejecutar el Pipeline Completo
-1. Corra el orquestador principal del proyecto:
-   ```bash
-   python main.py
-   ```
-2. **Qué sucede internamente durante la ejecución:**
-   - **Fase 1 (ETL)**: Carga y depura los datos crudos, eliminando duplicados e inconsistencias. Filtra las 8 variables de Data Leakage, genera variables temporales y de antigüedad, codifica las características nominales/ordinales y divide la data de forma estratificada (Train 70%, Val 15%, Test 15%). Compara `StandardScaler` y `MinMaxScaler` seleccionando el óptimo, aplica balanceo SMOTE al set de entrenamiento y almacena los sets limpios en `data/processed/`.
-   - **Fase 2 (EDA)**: Produce automáticamente 10 gráficos interactivos y estáticos de distribuciones espaciales, temporales y demográficas, guardándolos en `outputs/figures/`.
-   - **Fase 3 (Selección de Variables)**: Ejecuta los 5 algoritmos de filtrado e importancia (Correlation, Permutation, SHAP, RFE y Mutual Information). Genera una tabla de votación por consenso en `outputs/reports/` y guarda el set final recortado.
-   - **Fase 4 (Modelo Base)**: Realiza una búsqueda automática preliminar de arquitecturas y entrena el modelo MLP Base con callbacks activos de control de sobreajuste.
-   - **Fase 5 (Modelo Híbrido)**: Corre el Algoritmo Genético optimizado en DEAP comparando tasas de mutación y evolución del fitness (Macro F1-score). Entrena el modelo MLP híbrido final con la arquitectura sintonizada.
-   - **Fase 6 (Evaluación)**: Genera las métricas de rendimiento comparativas en Test set, dibuja matrices de confusión y curvas ROC/PR comparativas, y ejecuta la prueba estadística de McNemar para certificar la significancia del modelo.
-   - **Fase 7 (Interpretabilidad)**: Evalúa los valores SHAP globales (beeswarm summary) y locales con LIME para casos de ejemplo.
-
-### Paso 4: Iniciar la Aplicación Streamlit
-1. Lance el servidor del dashboard interactivo:
-   ```bash
-   streamlit run app/app.py
-   ```
-2. Interactúe con las diferentes pestañas de KPIs, mapas geográficos de calor de Ecuador, estimaciones de riesgo predictivo en tiempo real con explicación local LIME, y descargue el reporte académico formal generado automáticamente en PDF.
+### Paso 3: Entrenar los Modelos y Explorar Resultados
+Una vez abierta la aplicación en su navegador web:
+1. **Entrene el Pipeline**: Navegue al menú lateral en **"Entrenamiento"**, seleccione la estrategia de balanceo de clases (SMOTE, Submuestreo o Pesos) y haga clic en **"Iniciar Pipeline Completo de Entrenamiento"**.
+   - *Nota: La consola web transmitirá las salidas en tiempo real y guardará el historial de logs de forma persistente. No necesita volver a entrenar la próxima vez que abra la aplicación.*
+2. **Explore el Dashboard**: Revise mapas de calor geográficos y KPIs demográficos calculados dinámicamente.
+3. **Realice Predicciones**: Ingrese casos de prueba individuales para estimar el riesgo de localización en tiempo real y obtener explicaciones LIME interactivas.
+4. **Compare y Descargue**: Analice las curvas ROC/PR, matrices de confusión y descargue el artículo en formato IEEE o reportes detallados en PDF y Excel.
 
 ---
 
 ## 📄 Publicación IEEE
 El reporte académico formal que resume la introducción, metodología, experimentación y conclusiones en formato de artículo científico se encuentra disponible en [outputs/reports/IEEE_scientific_article.md](outputs/reports/IEEE_scientific_article.md).
-

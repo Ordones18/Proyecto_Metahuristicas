@@ -9,8 +9,13 @@ from sklearn.metrics import (
     roc_auc_score, precision_recall_curve, auc, log_loss, confusion_matrix, roc_curve
 )
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
+
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
 
 # Asegurar que el directorio src está en el path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -153,95 +158,98 @@ def evaluate_models():
             f.write("Las predicciones de ambos modelos no muestran discrepancias estadísticamente significativas en el conjunto de prueba.\n")
             
     # --- GRÁFICOS DE EVALUACIÓN ---
-    print("  - Generando gráficos de curvas ROC y Precision-Recall...")
-    
-    # 1. Curva ROC Comparativa
-    fpr_b, tpr_b, _ = roc_curve(y_test, probs_base)
-    fpr_h, tpr_h, _ = roc_curve(y_test, probs_hybrid)
-    
-    plt.figure(figsize=(10, 8))
-    plt.plot(fpr_b, tpr_b, color='blue', lw=2, label=f'MLP Base (AUC = {metrics["Base"]["ROC-AUC"]:.4f})')
-    plt.plot(fpr_h, tpr_h, color='red', lw=2, label=f'MLP Híbrido GA (AUC = {metrics["Hybrid"]["ROC-AUC"]:.4f})')
-    plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('Tasa de Falsos Positivos (FPR)')
-    plt.ylabel('Tasa de Verdaderos Positivos (TPR)')
-    plt.title('Curva ROC Comparativa (Conjunto de Test)')
-    plt.legend(loc="lower right")
-    plt.grid(True)
-    plt.savefig(os.path.join(FIGURES_DIR, '14_curva_roc_comparativa.png'), dpi=300)
-    plt.close()
-    
-    # 2. Curva Precision-Recall Comparativa
-    plt.figure(figsize=(10, 8))
-    plt.plot(r_b, p_b, color='blue', lw=2, label=f'MLP Base (PR-AUC = {metrics["Base"]["PR-AUC"]:.4f})')
-    plt.plot(r_h, p_h, color='red', lw=2, label=f'MLP Híbrido GA (PR-AUC = {metrics["Hybrid"]["PR-AUC"]:.4f})')
-    plt.xlabel('Recall (Sensibilidad)')
-    plt.ylabel('Precision (Exactitud Predictiva)')
-    plt.title('Curva Precision-Recall Comparativa (Conjunto de Test)')
-    plt.legend(loc="lower left")
-    plt.grid(True)
-    plt.savefig(os.path.join(FIGURES_DIR, '15_curva_pr_comparativa.png'), dpi=300)
-    plt.close()
-    
-    # 3. Matrices de Confusión
-    print("  - Generando matrices de confusión...")
-    cm_base = confusion_matrix(y_test, preds_base)
-    cm_hybrid = confusion_matrix(y_test, preds_hybrid)
-    
-    fig, ax = plt.subplots(1, 2, figsize=(16, 7))
-    
-    sns.heatmap(cm_base, annot=True, fmt='d', cmap='Blues', ax=ax[0], cbar=False)
-    ax[0].set_title('Matriz de Confusión - MLP Base')
-    ax[0].set_xlabel('Predicción')
-    ax[0].set_ylabel('Realidad')
-    ax[0].set_xticklabels(['No Encontrado', 'Encontrado'])
-    ax[0].set_yticklabels(['No Encontrado', 'Encontrado'])
-    
-    sns.heatmap(cm_hybrid, annot=True, fmt='d', cmap='Reds', ax=ax[1], cbar=False)
-    ax[1].set_title('Matriz de Confusión - MLP Híbrido (GA)')
-    ax[1].set_xlabel('Predicción')
-    ax[1].set_ylabel('Realidad')
-    ax[1].set_xticklabels(['No Encontrado', 'Encontrado'])
-    ax[1].set_yticklabels(['No Encontrado', 'Encontrado'])
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(FIGURES_DIR, '16_matrices_confusion.png'), dpi=300)
-    plt.close()
-    
-    # 4. Curvas de entrenamiento comparativas (Pérdida e Historial)
-    print("  - Generando historial de entrenamiento comparativo...")
-    hist_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_history.joblib'))
-    hist_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_history.joblib'))
-    
-    fig, ax = plt.subplots(1, 2, figsize=(16, 6))
-    
-    # Pérdida
-    ax[0].plot(hist_base['loss'], label='Base Train Loss', color='blue', linestyle='--')
-    ax[0].plot(hist_base['val_loss'], label='Base Val Loss', color='blue')
-    ax[0].plot(hist_hybrid['loss'], label='Híbrido Train Loss', color='red', linestyle='--')
-    ax[0].plot(hist_hybrid['val_loss'], label='Híbrido Val Loss', color='red')
-    ax[0].set_title('Historial de Pérdida (Loss)')
-    ax[0].set_xlabel('Época')
-    ax[0].set_ylabel('Binary Crossentropy')
-    ax[0].legend()
-    ax[0].grid(True)
-    
-    # Precisión / Exactitud (Accuracy)
-    ax[1].plot(hist_base['accuracy'], label='Base Train Acc', color='blue', linestyle='--')
-    ax[1].plot(hist_base['val_accuracy'], label='Base Val Acc', color='blue')
-    ax[1].plot(hist_hybrid['accuracy'], label='Híbrido Train Acc', color='red', linestyle='--')
-    ax[1].plot(hist_hybrid['val_accuracy'], label='Híbrido Val Acc', color='red')
-    ax[1].set_title('Historial de Exactitud (Accuracy)')
-    ax[1].set_xlabel('Época')
-    ax[1].set_ylabel('Accuracy')
-    ax[1].legend()
-    ax[1].grid(True)
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(FIGURES_DIR, '17_curvas_entrenamiento_comparativas.png'), dpi=300)
-    plt.close()
+    if HAS_PLOTTING:
+        print("  - Generando gráficos de curvas ROC y Precision-Recall...")
+        
+        # 1. Curva ROC Comparativa
+        fpr_b, tpr_b, _ = roc_curve(y_test, probs_base)
+        fpr_h, tpr_h, _ = roc_curve(y_test, probs_hybrid)
+        
+        plt.figure(figsize=(10, 8))
+        plt.plot(fpr_b, tpr_b, color='blue', lw=2, label=f'MLP Base (AUC = {metrics["Base"]["ROC-AUC"]:.4f})')
+        plt.plot(fpr_h, tpr_h, color='red', lw=2, label=f'MLP Híbrido GA (AUC = {metrics["Hybrid"]["ROC-AUC"]:.4f})')
+        plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('Tasa de Falsos Positivos (FPR)')
+        plt.ylabel('Tasa de Verdaderos Positivos (TPR)')
+        plt.title('Curva ROC Comparativa (Conjunto de Test)')
+        plt.legend(loc="lower right")
+        plt.grid(True)
+        plt.savefig(os.path.join(FIGURES_DIR, '14_curva_roc_comparativa.png'), dpi=300)
+        plt.close()
+        
+        # 2. Curva Precision-Recall Comparativa
+        plt.figure(figsize=(10, 8))
+        plt.plot(r_b, p_b, color='blue', lw=2, label=f'MLP Base (PR-AUC = {metrics["Base"]["PR-AUC"]:.4f})')
+        plt.plot(r_h, p_h, color='red', lw=2, label=f'MLP Híbrido GA (PR-AUC = {metrics["Hybrid"]["PR-AUC"]:.4f})')
+        plt.xlabel('Recall (Sensibilidad)')
+        plt.ylabel('Precision (Exactitud Predictiva)')
+        plt.title('Curva Precision-Recall Comparativa (Conjunto de Test)')
+        plt.legend(loc="lower left")
+        plt.grid(True)
+        plt.savefig(os.path.join(FIGURES_DIR, '15_curva_pr_comparativa.png'), dpi=300)
+        plt.close()
+        
+        # 3. Matrices de Confusión
+        print("  - Generando matrices de confusión...")
+        cm_base = confusion_matrix(y_test, preds_base)
+        cm_hybrid = confusion_matrix(y_test, preds_hybrid)
+        
+        fig, ax = plt.subplots(1, 2, figsize=(16, 7))
+        
+        sns.heatmap(cm_base, annot=True, fmt='d', cmap='Blues', ax=ax[0], cbar=False)
+        ax[0].set_title('Matriz de Confusión - MLP Base')
+        ax[0].set_xlabel('Predicción')
+        ax[0].set_ylabel('Realidad')
+        ax[0].set_xticklabels(['No Encontrado', 'Encontrado'])
+        ax[0].set_yticklabels(['No Encontrado', 'Encontrado'])
+        
+        sns.heatmap(cm_hybrid, annot=True, fmt='d', cmap='Reds', ax=ax[1], cbar=False)
+        ax[1].set_title('Matriz de Confusión - MLP Híbrido (GA)')
+        ax[1].set_xlabel('Predicción')
+        ax[1].set_ylabel('Realidad')
+        ax[1].set_xticklabels(['No Encontrado', 'Encontrado'])
+        ax[1].set_yticklabels(['No Encontrado', 'Encontrado'])
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIGURES_DIR, '16_matrices_confusion.png'), dpi=300)
+        plt.close()
+        
+        # 4. Curvas de entrenamiento comparativas (Pérdida e Historial)
+        print("  - Generando historial de entrenamiento comparativo...")
+        hist_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_history.joblib'))
+        hist_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_history.joblib'))
+        
+        fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # Pérdida
+        ax[0].plot(hist_base['loss'], label='Base Train Loss', color='blue', linestyle='--')
+        ax[0].plot(hist_base['val_loss'], label='Base Val Loss', color='blue')
+        ax[0].plot(hist_hybrid['loss'], label='Híbrido Train Loss', color='red', linestyle='--')
+        ax[0].plot(hist_hybrid['val_loss'], label='Híbrido Val Loss', color='red')
+        ax[0].set_title('Historial de Pérdida (Loss)')
+        ax[0].set_xlabel('Época')
+        ax[0].set_ylabel('Binary Crossentropy')
+        ax[0].legend()
+        ax[0].grid(True)
+        
+        # Precisión / Exactitud (Accuracy)
+        ax[1].plot(hist_base['accuracy'], label='Base Train Acc', color='blue', linestyle='--')
+        ax[1].plot(hist_base['val_accuracy'], label='Base Val Acc', color='blue')
+        ax[1].plot(hist_hybrid['accuracy'], label='Híbrido Train Acc', color='red', linestyle='--')
+        ax[1].plot(hist_hybrid['val_accuracy'], label='Híbrido Val Acc', color='red')
+        ax[1].set_title('Historial de Exactitud (Accuracy)')
+        ax[1].set_xlabel('Época')
+        ax[1].set_ylabel('Accuracy')
+        ax[1].legend()
+        ax[1].grid(True)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIGURES_DIR, '17_curvas_entrenamiento_comparativas.png'), dpi=300)
+        plt.close()
+    else:
+        print("  - [Evaluation] Omitiendo generación de gráficos comparativos por incompatibilidad de directiva de seguridad.")
     
     # Generar archivo de reporte en Excel con xlsxwriter
     excel_path = os.path.join(REPORTS_DIR, 'reporte_comparativo_modelos.xlsx')

@@ -6,7 +6,7 @@ RANDOM_SEED = 42
 # Rutas del proyecto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
-RAW_DATA_PATH = os.path.join(BASE_DIR, 'mdi_personasdesaparecidas_pm_2017_2025 (1).xlsx')
+RAW_DATA_PATH = os.path.join(BASE_DIR, 'mdi_personasdesaparecidas_pm_2017_2025.xlsx')
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, 'processed')
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 OUTPUTS_DIR = os.path.join(BASE_DIR, 'outputs')
@@ -47,8 +47,8 @@ GA_PARAM_SPACE = {
 
 # Configuración del GA
 GA_CONFIG = {
-    'pop_size': 8,         # Reducido para acelerar la optimización
-    'ngen': 4,            # Generaciones reducidas
+    'pop_size': 16,        # Aumentado para mejor exploración en entrenamiento definitivo
+    'ngen': 8,             # Aumentado para asegurar mayor convergencia del fitness
     'cxpb': 0.7,          # Probabilidad de cruce
     'mutpb': 0.2,         # Probabilidad de mutación
     'mut_indpb': 0.15,    # Probabilidad de mutar un gen individual

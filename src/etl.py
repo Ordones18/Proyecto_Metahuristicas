@@ -354,9 +354,13 @@ def run_etl(balance_method='smote'):
     pd.Series(y_val).to_csv(os.path.join(PROCESSED_DATA_DIR, 'y_val.csv'), index=False)
     pd.Series(y_test).to_csv(os.path.join(PROCESSED_DATA_DIR, 'y_test.csv'), index=False)
     
+    class_weights_path = os.path.join(MODELS_DIR, 'class_weights.joblib')
     if class_weights:
-        joblib.dump(class_weights, os.path.join(MODELS_DIR, 'class_weights.joblib'))
-        print(f"  - Pesos de clase guardados en {os.path.join(MODELS_DIR, 'class_weights.joblib')}")
+        joblib.dump(class_weights, class_weights_path)
+        print(f"  - Pesos de clase guardados en {class_weights_path}")
+    else:
+        if os.path.exists(class_weights_path):
+            os.remove(class_weights_path)
         
     print("[ETL] ¡Pipeline ETL completado con éxito! Archivos guardados en data/processed/\n")
     return X_train_bal, X_val_scaled, X_test_scaled, y_train_bal, y_val, y_test

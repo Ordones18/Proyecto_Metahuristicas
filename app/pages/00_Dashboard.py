@@ -12,8 +12,7 @@ from folium.plugins import HeatMap
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from src.config import RAW_DATA_PATH, RANDOM_SEED
 
-# Configuración de página
-st.set_page_config(page_title="Dashboard - Personas Desaparecidas", page_icon="📊", layout="wide")
+
 
 # Estilos CSS
 st.markdown("""

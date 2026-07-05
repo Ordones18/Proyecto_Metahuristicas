@@ -10,8 +10,13 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
 from deap import base, creator, tools, algorithms
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
+
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
 
 # Asegurar que el directorio src está en el path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,8 +35,10 @@ X_fitness_sample = None
 y_fitness_sample = None
 
 # Definir la estructura de DEAP
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-creator.create("Individual", list, fitness=creator.FitnessMax)
+if not hasattr(creator, "FitnessMax"):
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+if not hasattr(creator, "Individual"):
+    creator.create("Individual", list, fitness=creator.FitnessMax)
 
 def build_and_compile_mlp(input_shape, params):
     """
@@ -237,7 +244,8 @@ def compare_mutation_rates():
     best_overall_ind = None
     best_overall_fitness = -1.0
     
-    plt.figure(figsize=(10, 6))
+    if HAS_PLOTTING:
+        plt.figure(figsize=(10, 6))
     
     for mr in mutation_rates:
         start_time = time.time()
@@ -254,25 +262,39 @@ def compare_mutation_rates():
         
         print(f"    Tasa {mr}: Mejor Fitness = {best_ind.fitness.values[0]:.5f} (Tiempo: {elapsed:.2f}s)")
         
-        # Graficar curva de convergencia
-        plt.plot(range(len(fitness_history)), fitness_history, marker='o', label=f'Mut Rate: {mr}')
+        # Graficar curva de convergencia si es posible
+        if HAS_PLOTTING:
+            plt.plot(range(len(fitness_history)), fitness_history, marker='o', label=f'Mut Rate: {mr}')
         
         if best_ind.fitness.values[0] > best_overall_fitness:
             best_overall_fitness = best_ind.fitness.values[0]
             best_overall_ind = best_ind
             
-    plt.title('Comparación de la Evolución del Fitness según Tasas de Mutación')
-    plt.xlabel('Generación')
-    plt.ylabel('Fitness Máximo (Macro F1-Score)')
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(os.path.join(FIGURES_DIR, '13_evolucion_fitness_ga.png'), dpi=300)
-    plt.close()
-    
+    if HAS_PLOTTING:
+        plt.title('Comparación de la Evolución del Fitness según Tasas de Mutación')
+        plt.xlabel('Generación')
+        plt.ylabel('Fitness Máximo (Macro F1-Score)')
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(FIGURES_DIR, '13_evolucion_fitness_ga.png'), dpi=300)
+        plt.close()
+    else:
+        print("  - [Genetic Algorithm] Omitiendo gráfico de evolución de fitness por incompatibilidad de directiva de seguridad.")
+        
     # Guardar resultados comparativos
     joblib.dump(results, os.path.join(MODELS_DIR, 'ga_comparison_results.joblib'))
     return best_overall_ind
+
+
+class CompactEpochLogger(tf.keras.callbacks.Callback):
+    def __init__(self, epochs):
+        self.epochs = epochs
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        epoch_num = epoch + 1
+        if epoch_num == 1 or epoch_num == self.epochs or epoch_num % 5 == 0:
+            print(f"    [Epoca {epoch_num:02d}/{self.epochs}] - loss: {logs.get('loss', 0):.4f} - val_loss: {logs.get('val_loss', 0):.4f} - acc: {logs.get('accuracy', 0):.4f} - val_acc: {logs.get('val_accuracy', 0):.4f}")
 
 
 def train_hybrid_model():
@@ -303,21 +325,32 @@ def train_hybrid_model():
     
     # Callbacks
     checkpoint_path = os.path.join(MODELS_DIR, 'mlp_hybrid_checkpoint.keras')
+    epochs = best_params['epochs']
     my_callbacks = [
         callbacks.EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
         callbacks.ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_best_only=True),
-        callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, min_lr=1e-6)
+        callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, min_lr=1e-6),
+        CompactEpochLogger(epochs=epochs)
     ]
     
+    # Cargar pesos de clase si existen (para balanceo 'weight')
+    class_weights_path = os.path.join(MODELS_DIR, 'class_weights.joblib')
+    if os.path.exists(class_weights_path):
+        class_weights = joblib.load(class_weights_path)
+        print(f"  - Aplicando pesos de clase en el entrenamiento híbrido: {class_weights}")
+    else:
+        class_weights = None
+ 
     print("  - Entrenando el Modelo Híbrido final (MLP + GA) con todo el set de entrenamiento...")
     start_time = time.time()
     history = model.fit(
         X_train, y_train,
         validation_data=(X_val, y_val),
-        epochs=best_params['epochs'],
+        epochs=epochs,
         batch_size=best_params['batch_size'],
         callbacks=my_callbacks,
-        verbose=1
+        class_weight=class_weights,
+        verbose=0
     )
     train_time = time.time() - start_time
     print(f"  - Modelo híbrido optimizado entrenado en {train_time:.2f} segundos.")

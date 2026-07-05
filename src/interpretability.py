@@ -3,11 +3,16 @@ import sys
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-import shap
-from lime import lime_tabular
-import matplotlib.pyplot as plt
-import seaborn as sns
 import joblib
+
+try:
+    import shap
+    from lime import lime_tabular
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    HAS_PLOTTING = True
+except ImportError:
+    HAS_PLOTTING = False
 
 # Asegurar que el directorio src está en el path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,12 +36,23 @@ def run_interpretability_pipeline():
     model = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
     
     feature_names = X_train.columns.tolist()
+    background_data = X_train.sample(n=min(50, len(X_train)), random_state=RANDOM_SEED)
     
+    # Guardar los objetos SHAP para la aplicación Streamlit (los necesita el Predictor)
+    joblib.dump({
+        'background_data': background_data,
+        'feature_names': feature_names
+    }, os.path.join(MODELS_DIR, 'shap_explainer_data.joblib'))
+    
+    if not HAS_PLOTTING:
+        print("  - [Interpretability] Omitiendo visualizaciones estáticas SHAP/LIME por incompatibilidad de directivas de seguridad (Pillow DLL block).")
+        print("[Interpretabilidad] Pipeline completado (modo simplificado para la Web).\n")
+        return
+        
     # 3. ANÁLISIS GLOBAL CON SHAP
     print("  - Calculando Valores SHAP globales (KernelExplainer)...")
     # KernelExplainer es agnóstico del modelo. Para optimizar tiempo, tomamos:
     # 50 muestras de fondo (background) y explicamos 20 muestras representativas del test.
-    background_data = X_train.sample(n=min(50, len(X_train)), random_state=RANDOM_SEED)
     explain_data = X_test.sample(n=min(20, len(X_test)), random_state=RANDOM_SEED)
     
     # Definir función predictora para SHAP (debe retornar matriz de probabilidades de forma (N, 1) o (N,))
@@ -62,11 +78,7 @@ def run_interpretability_pipeline():
     plt.close()
     print("    - Gráfico SHAP beeswarm guardado.")
     
-    # Guardar los objetos SHAP para la aplicación Streamlit
-    joblib.dump({
-        'background_data': background_data,
-        'feature_names': feature_names
-    }, os.path.join(MODELS_DIR, 'shap_explainer_data.joblib'))
+    # El archivo shap_explainer_data.joblib ya fue guardado al inicio del pipeline.
     
     # 4. ANÁLISIS LOCAL CON LIME
     print("  - Configurando LIME Tabular Explainer...")

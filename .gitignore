@@ -10,6 +10,13 @@ models/
 outputs/logs/
 outputs/figures/
 outputs/reports/
-*.xlsx
 *.keras
 *.joblib
+
+# Streamlit
+.streamlit/
+
+# Entornos virtuales
+.venv/
+venv/
+env/

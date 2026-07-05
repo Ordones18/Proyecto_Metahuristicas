@@ -102,6 +102,16 @@ def run_grid_search(X_train, y_train, X_val, y_val):
     return best_config
 
 
+class CompactEpochLogger(tf.keras.callbacks.Callback):
+    def __init__(self, epochs):
+        self.epochs = epochs
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        epoch_num = epoch + 1
+        if epoch_num == 1 or epoch_num == self.epochs or epoch_num % 5 == 0:
+            print(f"    [Epoca {epoch_num:02d}/{self.epochs}] - loss: {logs.get('loss', 0):.4f} - val_loss: {logs.get('val_loss', 0):.4f} - acc: {logs.get('accuracy', 0):.4f} - val_acc: {logs.get('val_accuracy', 0):.4f}")
+
+
 def train_base_model():
     """
     Orquesta el entrenamiento del Modelo MLP Base: Búsqueda de hiperparámetros ->
@@ -133,22 +143,33 @@ def train_base_model():
     
     # 4. Callbacks para el entrenamiento final
     checkpoint_path = os.path.join(MODELS_DIR, 'mlp_base_checkpoint.keras')
+    epochs = 30
     my_callbacks = [
         callbacks.EarlyStopping(monitor='val_loss', patience=8, restore_best_weights=True),
         callbacks.ModelCheckpoint(filepath=checkpoint_path, monitor='val_loss', save_best_only=True),
-        callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6)
+        callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, min_lr=1e-6),
+        CompactEpochLogger(epochs=epochs)
     ]
     
+    # Cargar pesos de clase si existen (para balanceo 'weight')
+    class_weights_path = os.path.join(MODELS_DIR, 'class_weights.joblib')
+    if os.path.exists(class_weights_path):
+        class_weights = joblib.load(class_weights_path)
+        print(f"  - Aplicando pesos de clase en el entrenamiento: {class_weights}")
+    else:
+        class_weights = None
+        
     # 5. Entrenamiento final completo
     print("  - Iniciando entrenamiento final del Modelo Base MLP...")
     start_time = time.time()
     history = model.fit(
         X_train, y_train,
         validation_data=(X_val, y_val),
-        epochs=30,  # 30 épocas máximo para MLP Base
+        epochs=epochs,  # 30 épocas máximo para MLP Base
         batch_size=64,
         callbacks=my_callbacks,
-        verbose=1
+        class_weight=class_weights,
+        verbose=0
     )
     train_time = time.time() - start_time
     print(f"  - Modelo base entrenado con éxito en {train_time:.2f} segundos.")
