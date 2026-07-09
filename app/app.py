@@ -342,10 +342,9 @@ def show_inicio():
     """, unsafe_allow_html=True)
 
     # Pestañas principales de navegación informativa
-    tab_context, tab_architecture, tab_simulator, tab_results = st.tabs([
+    tab_context, tab_architecture, tab_results = st.tabs([
         ":material/manage_search: Contexto y Desafíos", 
         ":material/account_tree: Arquitectura Híbrida", 
-        ":material/science: Simulador de Cromosoma (GA)", 
         ":material/monitoring: Resultados de Rendimiento"
     ])
 
@@ -454,63 +453,6 @@ def show_inicio():
             ```
             """)
             st.caption("Diagrama de flujo del pipeline híbrido estructurado bajo estándares IEEE.")
-
-    with tab_simulator:
-        st.markdown('<h3 style="color: #FF4B4B; font-weight: 600; margin-top:0;">Simulador de Cromosoma de Red Neuronal</h3>', unsafe_allow_html=True)
-        st.markdown(
-            "En la optimización evolutiva, **DEAP** representa cada arquitectura neuronal como un cromosoma "
-            "(una lista de índices discretos que mapean a valores reales en el espacio de búsqueda). "
-            "Usa los controles para simular cómo el Algoritmo Genético traduce e indexa los hiperparámetros:"
-        )
-
-        keys_list = list(GA_PARAM_SPACE.keys())
-        
-        col_s1, col_s2 = st.columns(2)
-        
-        with col_s1:
-            sim_lr = st.select_slider("Tasa de Aprendizaje (learning_rate)", options=GA_PARAM_SPACE['learning_rate'], value=1e-3, key="sim_lr")
-            sim_layers = st.slider("Número de Capas Ocultas (n_layers)", min_value=1, max_value=4, value=2, key="sim_layers")
-            sim_neurons = st.select_slider("Neuronas por Capa (neurons_per_layer)", options=GA_PARAM_SPACE['neurons_per_layer'], value=128, key="sim_neurons")
-            sim_activation = st.selectbox("Función de Activación (activation)", options=GA_PARAM_SPACE['activation'], index=0, key="sim_activation")
-            
-        with col_s2:
-            sim_dropout = st.slider("Tasa de Regularización (dropout)", min_value=0.1, max_value=0.5, step=0.1, value=0.2, key="sim_dropout")
-            sim_batch = st.select_slider("Tamaño de Lote (batch_size)", options=GA_PARAM_SPACE['batch_size'], value=64, key="sim_batch")
-            sim_optimizer = st.selectbox("Algoritmo Optimizador (optimizer)", options=GA_PARAM_SPACE['optimizer'], index=0, key="sim_optimizer")
-            sim_epochs = st.select_slider("Épocas de Entrenamiento (epochs)", options=GA_PARAM_SPACE['epochs'], value=50, key="sim_epochs")
-            
-        # Calcular los índices discretos de cada parámetro en el espacio de búsqueda
-        idx_lr = GA_PARAM_SPACE['learning_rate'].index(sim_lr)
-        idx_layers = GA_PARAM_SPACE['n_layers'].index(sim_layers)
-        idx_neurons = GA_PARAM_SPACE['neurons_per_layer'].index(sim_neurons)
-        idx_dropout = GA_PARAM_SPACE['dropout'].index(sim_dropout)
-        idx_batch = GA_PARAM_SPACE['batch_size'].index(sim_batch)
-        idx_activation = GA_PARAM_SPACE['activation'].index(sim_activation)
-        idx_optimizer = GA_PARAM_SPACE['optimizer'].index(sim_optimizer)
-        idx_epochs = GA_PARAM_SPACE['epochs'].index(sim_epochs)
-        
-        # El cromosoma es un vector ordenado
-        chromosome = [idx_lr, idx_layers, idx_neurons, idx_dropout, idx_batch, idx_activation, idx_optimizer, idx_epochs]
-        
-        st.markdown("#### Cromosoma Codificado en Memoria (Individuo DEAP)")
-        
-        cromo_blocks = "".join([
-            f'<div style="display:inline-block; background:rgba(255, 75, 75, 0.12); border: 1.5px solid #FF4B4B; border-radius: 8px; padding: 0.6rem 1rem; margin: 0.4rem; text-align: center; min-width: 110px;">'
-            f'<div style="font-size:0.75rem; color:#A0A0A0; margin-bottom:0.15rem;">Gen {i} ({keys_list[i]})</div>'
-            f'<div style="font-size:1.4rem; font-weight:800; color:#FFFFFF;">{chromosome[i]}</div>'
-            f'</div>'
-            for i in range(len(chromosome))
-        ])
-        
-        st.markdown(f'<div style="background:rgba(255,255,255,0.01); border-radius:12px; padding:1.2rem; border:1px solid rgba(255,255,255,0.05); margin-bottom:1rem; text-align:center;">{cromo_blocks}</div>', unsafe_allow_html=True)
-        
-        st.markdown(
-            f":material/track_changes: **Decodificación del Genotipo**: Este vector de genes **`{chromosome}`** es mapeado por la función "
-            f"`decode_chromosome` a su respectivo fenotipo para compilar el modelo de Keras: "
-            f"una red neuronal densa (MLP) con **{sim_layers} capa(s) oculta(s)**, conteniendo **{sim_neurons} neuronas** por capa, "
-            f"activación **{sim_activation}**, tasa de dropout de **{sim_dropout}**, tamaño de batch **{sim_batch}**, "
-            f"optimizador **{sim_optimizer}**, learning rate de **{sim_lr}**, y entrenada durante **{sim_epochs} épocas**."
-        )
 
     with tab_results:
         st.markdown('<h3 style="color: #FF4B4B; font-weight: 600; margin-top:0;">Métricas Comparativas Experimentales</h3>', unsafe_allow_html=True)
