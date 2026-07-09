@@ -77,17 +77,17 @@ La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas 
 
 ---
 
-## 📊 Resultados Experimentales Registrados
+## 📊 Resultados Experimentos Registrados
 
 | Métrica | MLP Base (Sintonía Estática) | MLP Híbrido (Optimizado por GA) | Mejora Relativa |
 | :--- | :---: | :---: | :---: |
-| **Accuracy** | 76.36% | **77.90%** | **+2.02%** 🟢 |
-| **F1-Score (Macro)** | 0.5878 | **0.5955** | **+1.31%** 🟢 |
-| **Log Loss (Pérdida)** | 0.4247 | **0.4102** | **-3.42% (Reducción)** 🟢 |
-| **Tiempo de Inferencia** | 0.0298 ms | **0.0239 ms** | **-19.94% (Reducción)** 🟢 |
-| **Tiempo de Entrenamiento** | 78.28 s | **53.34 s** | **-31.86% (Reducción)** 🟢 |
+| **Accuracy** | 75.99% | **78.20%** | **+2.90%** 🟢 |
+| **F1-Score (Macro)** | 0.5856 | **0.5993** | **+2.34%** 🟢 |
+| **Log Loss (Pérdida)** | 0.4795 | **0.4148** | **-13.50% (Reducción)** 🟢 |
+| **Tiempo de Inferencia** | 0.0265 ms | **0.0264 ms** | **-0.44% (Reducción)** 🟢 |
+| **Tiempo de Entrenamiento** | 19.96 s | **29.11 s** | **+45.85%** 🟡 |
 
-- **Resultado del Test de McNemar**: El p-valor obtenido de **$2.11 \times 10^{-15}$** (muy inferior al nivel de significancia de $\alpha = 0.05$) demuestra que la diferencia en el rendimiento predictivo es **altamente significativa**. La optimización metaheurística reduce el sobreajuste y sintoniza una arquitectura más ligera y rápida.
+- **Resultado del Test de McNemar**: El p-valor obtenido de **$0.00$** (con un estadístico $\chi^2 = 95.68$, muy inferior al nivel de significancia de $\alpha = 0.05$) demuestra que la diferencia en el rendimiento predictivo es **altamente significativa**. La sintonización evolutiva mediante Algoritmo Genético reduce el error de pérdida binaria y mejora sustancialmente la capacidad de generalización sobre el test set.
 
 ---
 
@@ -158,5 +158,3 @@ Una vez abierta la aplicación en su navegador web:
 
 ---
 
-## 📄 Publicación IEEE
-El reporte académico formal que resume la introducción, metodología, experimentación y conclusiones en formato de artículo científico se encuentra disponible en [outputs/reports/IEEE_scientific_article.md](outputs/reports/IEEE_scientific_article.md).
