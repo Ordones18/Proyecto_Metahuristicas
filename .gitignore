@@ -10,6 +10,9 @@ models/
 outputs/logs/
 outputs/figures/
 outputs/reports/
+outputs/benchmark/
+outputs/scratch/
+!outputs/scratch/run_benchmarks.py
 *.keras
 *.joblib
 
@@ -17,6 +20,7 @@ outputs/reports/
 .streamlit/
 
 # Entornos virtuales
+.venv_wsl/
 .venv/
 venv/
 env/

@@ -148,6 +148,31 @@ Inicie el servidor de la aplicación web:
 streamlit run app/app.py
 ```
 
+### 🐧 Ejecución en WSL (Para habilitar Soporte de GPU)
+Si deseas entrenar los modelos utilizando la GPU (tarjeta gráfica) en Windows, es necesario usar WSL2, ya que TensorFlow 2.11+ no soporta GPU de forma nativa en Windows.
+
+Hemos incluido un script automatizado `run_wsl.sh` para facilitar este proceso:
+
+1. Abre tu terminal de WSL (por ejemplo, Ubuntu).
+2. Asegúrate de tener instalado Python 3 y `venv`:
+   ```bash
+   sudo apt update && sudo apt install python3 python3-pip python3-venv -y
+   ```
+3. Otorga permisos de ejecución al script y ejecútalo:
+   ```bash
+   chmod +x run_wsl.sh
+   ./run_wsl.sh
+   ```
+El script creará un entorno virtual aislado para Linux (`.venv_wsl`), instalará las dependencias necesarias y te permitirá iniciar el pipeline de entrenamiento o lanzar el dashboard interactivo de Streamlit.
+
+Si prefieres activar el entorno de WSL y ejecutar Streamlit manualmente después de haber configurado el entorno, puedes hacerlo ejecutando:
+```bash
+# 1. Activar el entorno de WSL (asegúrate de haberlo creado e instalado las dependencias)
+source .venv_wsl/bin/activate
+# 2. Ejecutar Streamlit con la sintaxis correcta
+streamlit run app/app.py
+```
+
 ### Paso 3: Entrenar los Modelos y Explorar Resultados
 Una vez abierta la aplicación en su navegador web:
 1. **Entrene el Pipeline**: Navegue al menú lateral en **"Entrenamiento"**, seleccione la estrategia de balanceo de clases (SMOTE, Submuestreo o Pesos) y haga clic en **"Iniciar Pipeline Completo de Entrenamiento"**.
@@ -157,4 +182,5 @@ Una vez abierta la aplicación en su navegador web:
 4. **Compare y Descargue**: Analice las curvas ROC/PR, matrices de confusión y descargue el artículo en formato IEEE o reportes detallados en PDF y Excel.
 
 ---
+
 
