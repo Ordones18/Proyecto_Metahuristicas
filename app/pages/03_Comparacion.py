@@ -54,11 +54,15 @@ def load_comparison_data():
         model_base = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_base.keras'))
         model_hybrid = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_hybrid.keras'))
         
+        model_xgboost = joblib.load(os.path.join(models_dir, 'xgboost_model.joblib'))
+        
         probs_base = model_base.predict(X_test, verbose=0).ravel()
         probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
+        probs_xgboost = model_xgboost.predict_proba(X_test)[:, 1]
         
         preds_base = (probs_base >= 0.5).astype(int)
         preds_hybrid = (probs_hybrid >= 0.5).astype(int)
+        preds_xgboost = model_xgboost.predict(X_test).ravel().astype(int)
         
         hist_base = joblib.load(os.path.join(models_dir, 'mlp_base_history.joblib'))
         hist_hybrid = joblib.load(os.path.join(models_dir, 'mlp_hybrid_history.joblib'))
@@ -69,8 +73,10 @@ def load_comparison_data():
             'y_test': y_test,
             'probs_base': probs_base,
             'probs_hybrid': probs_hybrid,
+            'probs_xgboost': probs_xgboost,
             'preds_base': preds_base,
             'preds_hybrid': preds_hybrid,
+            'preds_xgboost': preds_xgboost,
             'hist_base': hist_base,
             'hist_hybrid': hist_hybrid,
             'ga_results': ga_results,
@@ -116,12 +122,15 @@ else:
             # ROC Curve
             fpr_b, tpr_b, _ = roc_curve(comp_data['y_test'], comp_data['probs_base'])
             fpr_h, tpr_h, _ = roc_curve(comp_data['y_test'], comp_data['probs_hybrid'])
+            fpr_x, tpr_x, _ = roc_curve(comp_data['y_test'], comp_data['probs_xgboost'])
             auc_base = auc(fpr_b, tpr_b)
             auc_hybrid = auc(fpr_h, tpr_h)
+            auc_xgboost = auc(fpr_x, tpr_x)
             
             fig_roc = go.Figure()
             fig_roc.add_trace(go.Scatter(x=fpr_b, y=tpr_b, mode='lines', name=f'MLP Base (AUC = {auc_base:.4f})', line=dict(color='#1f77b4', width=3)))
             fig_roc.add_trace(go.Scatter(x=fpr_h, y=tpr_h, mode='lines', name=f'MLP Híbrido (AUC = {auc_hybrid:.4f})', line=dict(color='#d62728', width=3)))
+            fig_roc.add_trace(go.Scatter(x=fpr_x, y=tpr_x, mode='lines', name=f'XGBoost (AUC = {auc_xgboost:.4f})', line=dict(color='#2ca02c', width=3)))
             fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', line=dict(dash='dash', color='gray'), name='Límite Aleatorio'))
             fig_roc.update_layout(
                 title='Curva ROC Comparativa (Test Set)',
@@ -135,12 +144,15 @@ else:
             # PR Curve
             p_b, r_b, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_base'])
             p_h, r_h, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_hybrid'])
+            p_x, r_x, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_xgboost'])
             pr_auc_b = auc(r_b, p_b)
             pr_auc_h = auc(r_h, p_h)
+            pr_auc_x = auc(r_x, p_x)
             
             fig_pr = go.Figure()
             fig_pr.add_trace(go.Scatter(x=r_b, y=p_b, mode='lines', name=f'MLP Base (PR-AUC = {pr_auc_b:.4f})', line=dict(color='#1f77b4', width=3)))
             fig_pr.add_trace(go.Scatter(x=r_h, y=p_h, mode='lines', name=f'MLP Híbrido (PR-AUC = {pr_auc_h:.4f})', line=dict(color='#d62728', width=3)))
+            fig_pr.add_trace(go.Scatter(x=r_x, y=p_x, mode='lines', name=f'XGBoost (PR-AUC = {pr_auc_x:.4f})', line=dict(color='#2ca02c', width=3)))
             fig_pr.update_layout(
                 title='Curva Precision-Recall Comparativa (Test Set)',
                 xaxis_title='Recall (Sensibilidad)',
@@ -156,10 +168,11 @@ else:
                 st.plotly_chart(fig_pr, use_container_width=True)
                 
         with tab2:
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             
             cm_base = confusion_matrix(comp_data['y_test'], comp_data['preds_base'])
             cm_hybrid = confusion_matrix(comp_data['y_test'], comp_data['preds_hybrid'])
+            cm_xgboost = confusion_matrix(comp_data['y_test'], comp_data['preds_xgboost'])
             labels = ['No Encontrado', 'Encontrado']
             
             fig_cm_b = px.imshow(
@@ -182,10 +195,22 @@ else:
             )
             fig_cm_h.update_layout(title='Matriz de Confusión - MLP Híbrido (GA)', template='plotly_dark', coloraxis_showscale=False)
             
+            fig_cm_x = px.imshow(
+                cm_xgboost, 
+                x=labels, 
+                y=labels, 
+                text_auto=True, 
+                color_continuous_scale='Greens',
+                labels=dict(x="Predicción", y="Realidad", color="Casos")
+            )
+            fig_cm_x.update_layout(title='Matriz de Confusión - XGBoost', template='plotly_dark', coloraxis_showscale=False)
+            
             with col1:
                 st.plotly_chart(fig_cm_b, use_container_width=True)
             with col2:
                 st.plotly_chart(fig_cm_h, use_container_width=True)
+            with col3:
+                st.plotly_chart(fig_cm_x, use_container_width=True)
                 
         with tab3:
             col1, col2 = st.columns(2)

@@ -48,13 +48,17 @@ st.write("Ingrese los datos de la desaparición para estimar la probabilidad de 
 @st.cache_resource
 def load_prediction_resources():
     try:
-        model = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
+        model_base = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_base.keras'))
+        model_hybrid = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
+        
+        model_xgboost = joblib.load(os.path.join(MODELS_DIR, 'xgboost_model.joblib'))
+        
         scaler = joblib.load(os.path.join(MODELS_DIR, 'scaler.joblib'))
         ohe = joblib.load(os.path.join(MODELS_DIR, 'one_hot_encoder.joblib'))
         target_encoder = joblib.load(os.path.join(MODELS_DIR, 'target_encoder.joblib'))
         selected_features = joblib.load(os.path.join(MODELS_DIR, 'selected_features.joblib'))
+        
         from lime import lime_tabular
-        # Recrear explicador LIME al vuelo leyendo X_train_selected.csv
         project_dir = os.path.dirname(MODELS_DIR)
         X_train_explain = pd.read_csv(os.path.join(project_dir, 'data', 'processed', 'X_train_selected.csv'))
         lime_explainer = lime_tabular.LimeTabularExplainer(
@@ -64,16 +68,37 @@ def load_prediction_resources():
             mode='classification',
             random_state=42
         )
-        return model, scaler, ohe, target_encoder, selected_features, lime_explainer, None
+        return {
+            'mlp_base': model_base,
+            'mlp_hybrid': model_hybrid,
+            'xgboost': model_xgboost,
+            'scaler': scaler,
+            'ohe': ohe,
+            'target_encoder': target_encoder,
+            'selected_features': selected_features,
+            'lime_explainer': lime_explainer
+        }, None
     except Exception as e:
-        return None, None, None, None, None, None, str(e)
+        return None, str(e)
 
 
-model, scaler, ohe, target_encoder, selected_features, lime_explainer, error_msg = load_prediction_resources()
+resources, error_msg = load_prediction_resources()
 
 if error_msg:
     st.error(f"Error al cargar los modelos de Inteligencia Artificial. Asegúrese de haber ejecutado el pipeline de entrenamiento (`main.py`) antes de realizar predicciones.\nDetalle: {error_msg}")
 else:
+    scaler = resources['scaler']
+    ohe = resources['ohe']
+    target_encoder = resources['target_encoder']
+    selected_features = resources['selected_features']
+    lime_explainer = resources['lime_explainer']
+    
+    # Selector de modelo fuera de las columnas para mayor visibilidad
+    selected_model_name = st.selectbox(
+        "Modelo a utilizar para la Inferencia",
+        ["MLP Híbrido (GA)", "MLP Base", "XGBoost (Challenger)"]
+    )
+    
     # Formulario en columnas
     with st.form("prediction_form"):
         col1, col2, col3 = st.columns(3)
@@ -177,8 +202,24 @@ else:
         # 5. Seleccionar variables
         final_input = scaled_input[selected_features]
         
-        # Realizar Inferencia
-        pred_prob = model.predict(final_input, verbose=0)[0][0]
+        # Realizar Inferencia según el modelo seleccionado
+        if selected_model_name == "MLP Híbrido (GA)":
+            model = resources['mlp_hybrid']
+            pred_prob = model.predict(final_input, verbose=0)[0][0]
+            def predict_fn(x):
+                prob = model.predict(x, verbose=0).astype(np.float64)
+                return np.hstack((1.0 - prob, prob))
+        elif selected_model_name == "MLP Base":
+            model = resources['mlp_base']
+            pred_prob = model.predict(final_input, verbose=0)[0][0]
+            def predict_fn(x):
+                prob = model.predict(x, verbose=0).astype(np.float64)
+                return np.hstack((1.0 - prob, prob))
+        else:
+            model = resources['xgboost']
+            pred_prob = model.predict_proba(final_input)[0][1]
+            def predict_fn(x):
+                return model.predict_proba(x).astype(np.float64)
         
         # Mostrar resultado
         st.subheader("Resultados de la Inferencia")
@@ -187,29 +228,24 @@ else:
         
         with col_res1:
             if pred_prob >= 0.5:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA ESTIMADA<br><br>Probabilidad: {pred_prob*100:.2f}%<br>Confianza: Alta</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA ESTIMADA ({selected_model_name})<br><br>Probabilidad: {pred_prob*100:.2f}%<br>Confianza: Alta</div>', unsafe_allow_html=True)
                 risk_level = "Bajo"
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO DE NO LOCALIZACIÓN<br><br>Probabilidad de Éxito: {pred_prob*100:.2f}%<br>Nivel de Riesgo: Crítico</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="result-box risk-high">RIESGO DE NO LOCALIZACIÓN ({selected_model_name})<br><br>Probabilidad de Éxito: {pred_prob*100:.2f}%<br>Nivel de Riesgo: Crítico</div>', unsafe_allow_html=True)
                 risk_level = "Alto"
                 
         with col_res2:
             # Explicación con LIME en tiempo real
             st.subheader("Explicación Local del Modelo (LIME)")
             
-            # Predictora para LIME (retorna dos clases)
-            def predict_fn(x):
-                prob = model.predict(x, verbose=0).astype(np.float64)
-                return np.hstack((1.0 - prob, prob))
-                
             with st.spinner("Generando explicación del caso..."):
                 exp = lime_explainer.explain_instance(
-                    data_row=final_input.iloc[0],
+                    data_row=final_input.iloc[0].values,
                     predict_fn=predict_fn,
                     num_features=5
                 )
                 
-                # Renderizar explicación local con Plotly en lugar de Matplotlib (para evitar bloqueo de DLL de Pillow)
+                # Renderizar explicación local con Plotly en lugar de Matplotlib
                 exp_list = exp.as_list()
                 df_exp = pd.DataFrame(exp_list, columns=['Variable', 'Contribucion'])
                 df_exp['Efecto'] = df_exp['Contribucion'].apply(
@@ -225,7 +261,7 @@ else:
                         'Favorece Localización (Positivo)': '#4CAF50',
                         'Favorece No Localización (Negativo)': '#F44336'
                     },
-                    title="Contribución de Variables a la Predicción"
+                    title=f"Contribución de Variables a la Predicción ({selected_model_name})"
                 )
                 fig.update_layout(
                     yaxis={'categoryorder': 'total ascending'},

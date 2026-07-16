@@ -5,8 +5,6 @@ import numpy as np
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, OneHotEncoder, OrdinalEncoder
-from imblearn.over_sampling import SMOTE
-from imblearn.under_sampling import RandomUnderSampler
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
@@ -266,49 +264,28 @@ def compare_scalers(X_train, y_train):
     return best_scaler
 
 
-def balance_data(X_train, y_train, method='smote'):
+def balance_data(X_train, y_train, method='weight'):
     """
     Aplica técnicas de balanceo de clases:
-    - 'smote': Remuestreo sintético para la clase minoritaria.
-    - 'under': Submuestreo aleatorio de la clase mayoritaria.
-    - 'weight': No remuestrea, pero calcula los pesos de clase para utilizarlos en el entrenamiento de la MLP.
+    - 'weight': No remuestrea, pero calcula los pesos de clase para utilizarlos en el entrenamiento de los modelos.
     """
     print(f"[ETL] Aplicando balanceo de clases método: '{method}'...")
     
-    if method == 'smote':
-        sm = SMOTE(random_state=RANDOM_SEED)
-        X_res, y_res = sm.fit_resample(X_train, y_train)
-        print(f"  - SMOTE aplicado. Dimensiones originales: {X_train.shape}, Nuevas: {X_res.shape}")
-        print(f"    Distribución de clases: {pd.Series(y_res).value_counts().to_dict()}")
-        return X_res, y_res, None
-        
-    elif method == 'under':
-        rus = RandomUnderSampler(random_state=RANDOM_SEED)
-        X_res, y_res = rus.fit_resample(X_train, y_train)
-        print(f"  - RandomUnderSampler aplicado. Dimensiones originales: {X_train.shape}, Nuevas: {X_res.shape}")
-        print(f"    Distribución de clases: {pd.Series(y_res).value_counts().to_dict()}")
-        return X_res, y_res, None
-        
-    elif method == 'weight':
-        # Calcular class weights
-        neg_count = (y_train == 0).sum()
-        pos_count = (y_train == 1).sum()
-        total = neg_count + pos_count
-        
-        # Fórmula: weight = total / (classes * class_count)
-        weight_0 = total / (2.0 * neg_count)
-        weight_1 = total / (2.0 * pos_count)
-        
-        class_weights = {0: weight_0, 1: weight_1}
-        print(f"  - Calculados Class Weights: {class_weights}")
-        return X_train, y_train, class_weights
-        
-    else:
-        print("  - Ningún método de balanceo aplicado.")
-        return X_train, y_train, None
+    # Calcular class weights
+    neg_count = (y_train == 0).sum()
+    pos_count = (y_train == 1).sum()
+    total = neg_count + pos_count
+    
+    # Fórmula: weight = total / (classes * class_count)
+    weight_0 = total / (2.0 * neg_count)
+    weight_1 = total / (2.0 * pos_count)
+    
+    class_weights = {0: weight_0, 1: weight_1}
+    print(f"  - Calculados Class Weights: {class_weights}")
+    return X_train, y_train, class_weights
 
 
-def run_etl(balance_method='smote'):
+def run_etl(balance_method='weight'):
     """
     Ejecuta el pipeline de ETL completo:
     Carga -> Limpieza -> Ingeniería de Variables -> Split -> Encoding -> Escalamiento -> Balanceo -> Almacenamiento.
@@ -366,4 +343,4 @@ def run_etl(balance_method='smote'):
     return X_train_bal, X_val_scaled, X_test_scaled, y_train_bal, y_val, y_test
 
 if __name__ == '__main__':
-    run_etl(balance_method='smote')
+    run_etl(balance_method='weight')

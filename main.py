@@ -22,6 +22,7 @@ from src.eda import generate_eda_plots
 from src.feature_engineering import select_features
 from src.model_base import train_base_model
 from src.model_hybrid import train_hybrid_model
+from src.model_xgboost import train_xgboost_model
 from src.evaluation import evaluate_models
 from src.interpretability import run_interpretability_pipeline
 
@@ -35,7 +36,7 @@ def main():
         # FASE 1: ETL
         logging.info(">>> Iniciando Fase 1: ETL...")
         phase_start = time.time()
-        run_etl(balance_method='smote')
+        run_etl(balance_method='weight')
         logging.info(f"Fase 1 completada con éxito en {time.time() - phase_start:.2f} segundos.\n")
         
         # FASE 2: EDA
@@ -61,6 +62,12 @@ def main():
         phase_start = time.time()
         train_hybrid_model()
         logging.info(f"Fase 5 completada con éxito en {time.time() - phase_start:.2f} segundos.\n")
+        
+        # FASE 5.5: Modelo XGBoost (Challenger)
+        logging.info(">>> Iniciando Fase 5.5: Entrenamiento de Modelo XGBoost (Challenger)...")
+        phase_start = time.time()
+        train_xgboost_model()
+        logging.info(f"Fase 5.5 completada con éxito en {time.time() - phase_start:.2f} segundos.\n")
         
         # FASE 6: Evaluación y Comparación
         logging.info(">>> Iniciando Fase 6: Evaluación y Comparación de Modelos...")

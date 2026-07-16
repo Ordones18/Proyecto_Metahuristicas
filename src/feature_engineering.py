@@ -35,12 +35,16 @@ def select_features(n_features_to_select=10):
     y_train = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'y_train.csv')).values.ravel()
     
     # Reducimos tamaño de muestra para acelerar cálculos costosos (SHAP, Permutation, RFE)
-    # Tomamos una muestra estratificada de 3,000 registros
-    df_temp = X_train.copy()
-    df_temp['target'] = y_train
-    sample_df = df_temp.groupby('target', group_keys=False).apply(lambda x: x.sample(min(len(x), 1500), random_state=RANDOM_SEED))
-    X_sample = sample_df.drop(columns=['target'])
-    y_sample = sample_df['target'].values
+    # Tomamos una muestra estratificada de 3,000 registros de manera compatible con pandas 2.x
+    samples = []
+    for val in np.unique(y_train):
+        mask = (y_train == val)
+        class_subset = X_train[mask]
+        class_sample = class_subset.sample(min(len(class_subset), 2500), random_state=RANDOM_SEED)
+        samples.append(class_sample)
+        
+    X_sample = pd.concat(samples, axis=0)
+    y_sample = y_train[X_sample.index]
     
     feature_names = X_train.columns.tolist()
     votes = pd.DataFrame(index=feature_names)

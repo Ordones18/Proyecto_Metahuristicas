@@ -5,6 +5,12 @@ echo "=========================================================="
 echo "    PROYECTO METAHURÍSTICAS: CONFIGURACIÓN EN WSL"
 echo "=========================================================="
 
+# ─── 0. Base: libs del driver NVIDIA que WSL2 expone desde Windows ─────────
+export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH
+
+# Desactivar compilación XLA para evitar errores de Autotuner en WSL2/GPU
+export TF_CPP_MIN_LOG_LEVEL=2
+
 # 1. Verificar si python3 y venv están instalados
 if ! command -v python3 &> /dev/null; then
     echo "[ERROR] Python 3 no está instalado en tu WSL. Por favor ejecuta:"
@@ -26,17 +32,46 @@ fi
 # 3. Activar el entorno virtual
 source "$ENV_DIR/bin/activate"
 
+# ─── Configurar CUDA libs desde pip (debe ejecutarse DESPUÉS de activar el venv) ─
+_NVIDIA_LIBS=$(python3 -c "
+import site, os
+sp = site.getsitepackages()[0]
+d = os.path.join(sp, 'nvidia')
+if os.path.isdir(d):
+    paths = [os.path.join(d, p, 'lib') for p in os.listdir(d) if os.path.isdir(os.path.join(d, p, 'lib'))]
+    print(':'.join(paths))
+" 2>/dev/null)
+if [ -n "$_NVIDIA_LIBS" ]; then
+    export LD_LIBRARY_PATH="$_NVIDIA_LIBS:$LD_LIBRARY_PATH"
+    echo "[GPU] Librerías CUDA de pip detectadas y configuradas."
+else
+    echo "[WARN] No se encontraron librerías nvidia-* de pip. Verifica la instalación."
+fi
+
 # 4. Actualizar pip e instalar requerimientos
 echo "[WSL] Instalando dependencias en el entorno WSL..."
-pip install --upgrade pip
+pip install --upgrade pip --quiet
 
 # Instalar TensorFlow y dependencias
-pip install -r requirements.txt
+pip install -r requirements.txt --quiet
 
 # Verificar si TensorFlow detecta la GPU en WSL
 echo "----------------------------------------------------------"
 echo "[WSL] Verificando detección de GPU por TensorFlow..."
-python3 -c "import tensorflow as tf; gpus = tf.config.list_physical_devices('GPU'); print('\n>>> Num GPUs Disponibles en TensorFlow:', len(gpus)); print('>>> Dispositivos:', gpus, '\n')"
+TF_CPP_MIN_LOG_LEVEL=2 python3 -c "
+import os; os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+print()
+print('>>> TensorFlow version:', tf.__version__)
+print('>>> Num GPUs disponibles:', len(gpus))
+if gpus:
+    for g in gpus: print('   ', g)
+    print('[OK] GPU lista para entrenamiento.')
+else:
+    print('[WARN] GPU no detectada. Revisa LD_LIBRARY_PATH o drivers.')
+print()
+"
 echo "----------------------------------------------------------"
 
 # 5. Ofrecer opciones de ejecución

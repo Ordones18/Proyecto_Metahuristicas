@@ -55,7 +55,7 @@ def run_mcnemar_test(y_true, y_pred1, y_pred2):
 
 def evaluate_models():
     """
-    Evalúa y compara el Modelo Base (MLP) y el Modelo Híbrido (MLP + GA).
+    Evalúa y compara el Modelo Base (MLP), el Modelo Híbrido (MLP + GA) y el modelo CatBoost (Challenger).
     Genera gráficos comparativos, métricas en tablas y ejecuta el Test de McNemar.
     """
     print("\n=== INICIANDO PIPELINE DE EVALUACIÓN Y COMPARACIÓN ===")
@@ -69,9 +69,12 @@ def evaluate_models():
     model_base = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_base.keras'))
     model_hybrid = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
     
+    model_xgboost = joblib.load(os.path.join(MODELS_DIR, 'xgboost_model.joblib'))
+    
     # Cargar estadísticas de entrenamiento
     stats_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_stats.joblib'))
     stats_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_stats.joblib'))
+    stats_xgboost = joblib.load(os.path.join(MODELS_DIR, 'xgboost_stats.joblib'))
     
     # 3. Predicciones e Inferencia
     print("  - Calculando predicciones y tiempos de inferencia...")
@@ -87,6 +90,12 @@ def evaluate_models():
     probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
     infer_time_hybrid = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
     preds_hybrid = (probs_hybrid >= 0.5).astype(int)
+    
+    # XGBoost
+    start_time = time.time()
+    probs_xgboost = model_xgboost.predict_proba(X_test)[:, 1]
+    infer_time_xgboost = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
+    preds_xgboost = model_xgboost.predict(X_test).ravel().astype(int)
     
     # 4. Calcular métricas
     metrics = {}
@@ -123,9 +132,25 @@ def evaluate_models():
     p_h, r_h, _ = precision_recall_curve(y_test, probs_hybrid)
     metrics['Hybrid']['PR-AUC'] = auc(r_h, p_h)
     
+    # XGBoost Model
+    metrics['XGBoost'] = {
+        'Accuracy': accuracy_score(y_test, preds_xgboost),
+        'Precision': precision_score(y_test, preds_xgboost, average='macro'),
+        'Recall': recall_score(y_test, preds_xgboost, average='macro'),
+        'F1-Score': f1_score(y_test, preds_xgboost, average='macro'),
+        'ROC-AUC': roc_auc_score(y_test, probs_xgboost),
+        'Log_Loss': log_loss(y_test, probs_xgboost),
+        'Train_Time': stats_xgboost['train_time'],
+        'Inference_Time_ms': infer_time_xgboost
+    }
+    
+    # Calcular PR-AUC para XGBoost
+    p_x, r_x, _ = precision_recall_curve(y_test, probs_xgboost)
+    metrics['XGBoost']['PR-AUC'] = auc(r_x, p_x)
+    
     df_metrics = pd.DataFrame(metrics).T
     
-    # Calcular mejoras porcentuales
+    # Calcular mejoras porcentuales de Híbrido sobre Base
     df_metrics.loc['Mejora (%)'] = ((df_metrics.loc['Hybrid'] - df_metrics.loc['Base']) / df_metrics.loc['Base']) * 100
     # Para Log Loss e Inferencia, menor es mejor, la mejora es inversa
     df_metrics.loc['Mejora (%)', 'Log_Loss'] = ((df_metrics.loc['Base', 'Log_Loss'] - df_metrics.loc['Hybrid', 'Log_Loss']) / df_metrics.loc['Base', 'Log_Loss']) * 100
@@ -138,24 +163,42 @@ def evaluate_models():
     
     # 5. Prueba de McNemar
     print("\n  - Ejecutando Test Estadístico de McNemar...")
-    stat, p_val = run_mcnemar_test(y_test, preds_base, preds_hybrid)
-    print(f"    Estadístico de McNemar: {stat:.5f}, p-valor: {p_val:.5e}")
-    significative = p_val < 0.05
-    print(f"    ¿La diferencia es estadísticamente significativa? {'SÍ' if significative else 'NO'}")
+    print("    * Comparando MLP Base vs MLP Híbrido:")
+    stat_hybrid, p_val_hybrid = run_mcnemar_test(y_test, preds_base, preds_hybrid)
+    significative_hybrid = p_val_hybrid < 0.05
+    print(f"      Estadístico: {stat_hybrid:.5f}, p-valor: {p_val_hybrid:.5e} (Significativo: {significative_hybrid})")
+    
+    print("    * Comparando MLP Híbrido vs XGBoost:")
+    stat_xgb, p_val_xgb = run_mcnemar_test(y_test, preds_hybrid, preds_xgboost)
+    significative_xgb = p_val_xgb < 0.05
+    print(f"      Estadístico: {stat_xgb:.5f}, p-valor: {p_val_xgb:.5e} (Significativo: {significative_xgb})")
     
     # Guardar resultados estadísticos
     with open(os.path.join(REPORTS_DIR, 'statistical_comparison.txt'), 'w', encoding='utf-8') as f:
-        f.write("PRUEBA ESTADÍSTICA DE MCNEMAR\n")
-        f.write("=============================\n")
-        f.write(f"Estadístico Chi-cuadrado: {stat:.5f}\n")
-        f.write(f"p-valor: {p_val:.5e}\n")
-        f.write(f"Significancia (alfa=0.05): {'Diferencia Estadísticamente Significativa' if significative else 'Diferencia No Significativa'}\n")
-        f.write("\nInterpretación:\n")
-        if significative:
-            f.write("El modelo híbrido optimizado mediante Algoritmo Genético presenta un comportamiento predictivo\n")
-            f.write("significativamente diferente y superior al modelo base MLP, confirmando la efectividad de la metaheurística.\n")
+        f.write("PRUEBAS ESTADÍSTICAS DE COMPARACIÓN (TEST DE MCNEMAR)\n")
+        f.write("====================================================\n\n")
+        
+        f.write("1. MLP Base vs MLP Híbrido (Optimizado por GA):\n")
+        f.write("----------------------------------------------\n")
+        f.write(f"Estadístico Chi-cuadrado: {stat_hybrid:.5f}\n")
+        f.write(f"p-valor: {p_val_hybrid:.5e}\n")
+        f.write(f"Significancia (alfa=0.05): {'Diferencia Estadísticamente Significativa' if significative_hybrid else 'Diferencia No Significativa'}\n")
+        if significative_hybrid:
+            f.write("Interpretación: El modelo híbrido optimizado mediante Algoritmo Genético presenta un comportamiento predictivo\n")
+            f.write("significativamente diferente y superior al modelo base MLP, confirmando la efectividad de la metaheurística.\n\n")
         else:
-            f.write("Las predicciones de ambos modelos no muestran discrepancias estadísticamente significativas en el conjunto de prueba.\n")
+            f.write("Interpretación: Las predicciones de ambos modelos no muestran discrepancias estadísticamente significativas.\n\n")
+            
+        f.write("2. MLP Híbrido vs XGBoost (Challenger):\n")
+        f.write("----------------------------------------\n")
+        f.write(f"Estadístico Chi-cuadrado: {stat_xgb:.5f}\n")
+        f.write(f"p-valor: {p_val_xgb:.5e}\n")
+        f.write(f"Significancia (alfa=0.05): {'Diferencia Estadísticamente Significativa' if significative_xgb else 'Diferencia No Significativa'}\n")
+        if significative_xgb:
+            f.write("Interpretación: Existe una diferencia estadísticamente significativa en el comportamiento predictivo\n")
+            f.write("entre el MLP Híbrido y XGBoost, evidenciando el impacto de las diferentes naturalezas de algoritmos y optimizaciones.\n")
+        else:
+            f.write("Interpretación: Las discrepancias predictivas entre el MLP Híbrido y XGBoost no son estadísticamente significativas.\n")
             
     # --- GRÁFICOS DE EVALUACIÓN ---
     if HAS_PLOTTING:
@@ -164,10 +207,12 @@ def evaluate_models():
         # 1. Curva ROC Comparativa
         fpr_b, tpr_b, _ = roc_curve(y_test, probs_base)
         fpr_h, tpr_h, _ = roc_curve(y_test, probs_hybrid)
+        fpr_x, tpr_x, _ = roc_curve(y_test, probs_xgboost)
         
         plt.figure(figsize=(10, 8))
         plt.plot(fpr_b, tpr_b, color='blue', lw=2, label=f'MLP Base (AUC = {metrics["Base"]["ROC-AUC"]:.4f})')
         plt.plot(fpr_h, tpr_h, color='red', lw=2, label=f'MLP Híbrido GA (AUC = {metrics["Hybrid"]["ROC-AUC"]:.4f})')
+        plt.plot(fpr_x, tpr_x, color='green', lw=2, label=f'XGBoost (AUC = {metrics["XGBoost"]["ROC-AUC"]:.4f})')
         plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
@@ -183,6 +228,7 @@ def evaluate_models():
         plt.figure(figsize=(10, 8))
         plt.plot(r_b, p_b, color='blue', lw=2, label=f'MLP Base (PR-AUC = {metrics["Base"]["PR-AUC"]:.4f})')
         plt.plot(r_h, p_h, color='red', lw=2, label=f'MLP Híbrido GA (PR-AUC = {metrics["Hybrid"]["PR-AUC"]:.4f})')
+        plt.plot(r_x, p_x, color='green', lw=2, label=f'XGBoost (PR-AUC = {metrics["XGBoost"]["PR-AUC"]:.4f})')
         plt.xlabel('Recall (Sensibilidad)')
         plt.ylabel('Precision (Exactitud Predictiva)')
         plt.title('Curva Precision-Recall Comparativa (Conjunto de Test)')
@@ -195,8 +241,9 @@ def evaluate_models():
         print("  - Generando matrices de confusión...")
         cm_base = confusion_matrix(y_test, preds_base)
         cm_hybrid = confusion_matrix(y_test, preds_hybrid)
+        cm_xgboost = confusion_matrix(y_test, preds_xgboost)
         
-        fig, ax = plt.subplots(1, 2, figsize=(16, 7))
+        fig, ax = plt.subplots(1, 3, figsize=(24, 7))
         
         sns.heatmap(cm_base, annot=True, fmt='d', cmap='Blues', ax=ax[0], cbar=False)
         ax[0].set_title('Matriz de Confusión - MLP Base')
@@ -211,6 +258,13 @@ def evaluate_models():
         ax[1].set_ylabel('Realidad')
         ax[1].set_xticklabels(['No Encontrado', 'Encontrado'])
         ax[1].set_yticklabels(['No Encontrado', 'Encontrado'])
+        
+        sns.heatmap(cm_xgboost, annot=True, fmt='d', cmap='Greens', ax=ax[2], cbar=False)
+        ax[2].set_title('Matriz de Confusión - XGBoost')
+        ax[2].set_xlabel('Predicción')
+        ax[2].set_ylabel('Realidad')
+        ax[2].set_xticklabels(['No Encontrado', 'Encontrado'])
+        ax[2].set_yticklabels(['No Encontrado', 'Encontrado'])
         
         plt.tight_layout()
         plt.savefig(os.path.join(FIGURES_DIR, '16_matrices_confusion.png'), dpi=300)
@@ -255,14 +309,22 @@ def evaluate_models():
     excel_path = os.path.join(REPORTS_DIR, 'reporte_comparativo_modelos.xlsx')
     with pd.ExcelWriter(excel_path, engine='xlsxwriter') as writer:
         df_metrics.to_excel(writer, sheet_name='Metricas')
-        # Escribir notas del test de McNemar
+        # Escribir notas de los tests de McNemar
         worksheet = writer.book.add_worksheet('Test McNemar')
-        worksheet.write(0, 0, 'Estadístico Chi-cuadrado')
-        worksheet.write(0, 1, stat)
-        worksheet.write(1, 0, 'p-valor')
-        worksheet.write(1, 1, p_val)
-        worksheet.write(2, 0, 'Estadísticamente Significativo')
-        worksheet.write(2, 1, 'SÍ' if significative else 'NO')
+        worksheet.write(0, 0, 'Comparación')
+        worksheet.write(0, 1, 'Estadístico Chi-cuadrado')
+        worksheet.write(0, 2, 'p-valor')
+        worksheet.write(0, 3, 'Estadísticamente Significativo')
+        
+        worksheet.write(1, 0, 'MLP Base vs MLP Híbrido')
+        worksheet.write(1, 1, stat_hybrid)
+        worksheet.write(1, 2, p_val_hybrid)
+        worksheet.write(1, 3, 'SÍ' if significative_hybrid else 'NO')
+        
+        worksheet.write(2, 0, 'MLP Híbrido vs XGBoost')
+        worksheet.write(2, 1, stat_xgb)
+        worksheet.write(2, 2, p_val_xgb)
+        worksheet.write(2, 3, 'SÍ' if significative_xgb else 'NO')
         
     print(f"  - Reporte de comparación en Excel guardado en: {excel_path}")
     print("[Evaluación] ¡Pipeline de evaluación finalizado con éxito!\n")

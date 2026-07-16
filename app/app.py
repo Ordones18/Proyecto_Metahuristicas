@@ -23,14 +23,19 @@ def load_metrics():
     metrics = {
         "acc_base": 0.7890,
         "acc_hybrid": 0.8879,
+        "acc_xgboost": 0.8200,
         "f1_base": 0.5999,
         "f1_hybrid": 0.6609,
+        "f1_xgboost": 0.6200,
         "loss_base": 0.3854,
         "loss_hybrid": 0.2516,
+        "loss_xgboost": 0.3000,
         "time_base": 0.0291,
         "time_hybrid": 0.0254,
+        "time_xgboost": 0.0300,
         "train_base": 65.13,
         "train_hybrid": 125.42,
+        "train_xgboost": 15.42,
         "f1_improvement": 10.17,
         "acc_improvement": 12.53,
         "loss_reduction": 34.70,
@@ -52,6 +57,12 @@ def load_metrics():
                 train_b = df.loc["Base", "Train_Time"] if "Train_Time" in df.columns else metrics["train_base"]
                 train_h = df.loc["Hybrid", "Train_Time"] if "Train_Time" in df.columns else metrics["train_hybrid"]
                 
+                acc_x = df.loc["XGBoost", "Accuracy"] if "XGBoost" in df.index else metrics["acc_xgboost"]
+                f1_x = df.loc["XGBoost", "F1-Score"] if "XGBoost" in df.index else metrics["f1_xgboost"]
+                loss_x = df.loc["XGBoost", "Log_Loss"] if "XGBoost" in df.index else metrics["loss_xgboost"]
+                time_x = df.loc["XGBoost", "Inference_Time_ms"] if "XGBoost" in df.index and "Inference_Time_ms" in df.columns else metrics["time_xgboost"]
+                train_x = df.loc["XGBoost", "Train_Time"] if "XGBoost" in df.index and "Train_Time" in df.columns else metrics["train_xgboost"]
+                
                 if "Mejora (%)" in df.index:
                     f1_imp = df.loc["Mejora (%)", "F1-Score"]
                     acc_imp = df.loc["Mejora (%)", "Accuracy"]
@@ -64,14 +75,19 @@ def load_metrics():
                 metrics.update({
                     "acc_base": acc_b,
                     "acc_hybrid": acc_h,
+                    "acc_xgboost": acc_x,
                     "f1_base": f1_b,
                     "f1_hybrid": f1_h,
+                    "f1_xgboost": f1_x,
                     "loss_base": loss_b,
                     "loss_hybrid": loss_h,
+                    "loss_xgboost": loss_x,
                     "time_base": time_b,
                     "time_hybrid": time_h,
+                    "time_xgboost": time_x,
                     "train_base": train_b,
                     "train_hybrid": train_h,
+                    "train_xgboost": train_x,
                     "f1_improvement": f1_imp,
                     "acc_improvement": acc_imp,
                     "loss_reduction": loss_red,
@@ -373,33 +389,16 @@ def show_inicio():
             st.write(
                 "La clase mayoritaria ('Encontrado') representa el **93.18%** de los datos. "
                 "Un clasificador básico predeciría siempre 'Encontrado' con alta precisión pero fallaría en detectar casos de riesgo. "
-                "Para balancear el aprendizaje, el pipeline de datos soporta tres metodologías:"
+                "Para balancear el aprendizaje, el proyecto utiliza de forma exclusiva la técnica de **Class Weights (Pesos de Clase)**."
             )
             
-            strategy = st.selectbox(
-                "Selecciona una estrategia de balanceo para ver su análisis:",
-                ["Class Weights (Pesos de Clase - Seleccionada por defecto)", "SMOTE (Remuestreo Sintético)", "Under-sampling (Submuestreo aleatorio)"],
-                key="balancing_strategy_selector"
+            st.info(
+                ":material/info: **Estrategia Seleccionada: Class Weights**\n\n"
+                "**Cómo funciona**: Penaliza más fuertemente los errores cometidos sobre la clase minoritaria en la función de costo (Binary Cross-entropy) durante el entrenamiento.\n\n"
+                "**Justificación Científica**:\n"
+                "- **Cero Datos Sintéticos**: A diferencia de SMOTE, no genera registros sintéticos/ficticios en variables categóricas, manteniendo la rigurosidad real de los datos históricos.\n"
+                "- **Cero Pérdida de Información**: A diferencia de Under-sampling (que desecharía cerca del 80% del historial de datos, perdiendo valiosa información sobre patrones geográficos y temporales complejos), este método conserva los 75,517 registros reales enteros."
             )
-
-            if "Class Weights" in strategy:
-                st.info(
-                    ":material/info: **Cómo funciona**: Penaliza más fuertemente los errores cometidos sobre la clase minoritaria en la función de costo (Binary Cross-entropy) durante el entrenamiento.\n\n"
-                    ":material/check_circle: **Ventajas**: Matemáticamente limpio y eficiente. Entrena sobre los datos reales originales sin fabricar registros ficticios ni destruir información.\n\n"
-                    ":material/cancel: **Desventajas**: Requiere ajustar de manera cuidadosa la matriz de pesos para evitar generar un exceso de falsos positivos."
-                )
-            elif "SMOTE" in strategy:
-                st.info(
-                    ":material/info: **Cómo funciona**: Crea muestras sintéticas en el espacio de características interpolando linealmente los registros de la clase minoritaria y sus vecinos más cercanos.\n\n"
-                    ":material/check_circle: **Ventajas**: Fuerza al modelo a aprender una frontera de decisión mucho más robusta y amplia para los casos no localizados.\n\n"
-                    ":material/cancel: **Desventajas**: Incrementa el tiempo de entrenamiento y puede generar muestras ruidosas o poco realistas en variables categóricas de alta cardinalidad."
-                )
-            else:
-                st.info(
-                    ":material/info: **Cómo funciona**: Elimina aleatoriamente registros de la clase mayoritaria (Encontrados) hasta igualar en proporción 50/50 a la clase minoritaria.\n\n"
-                    ":material/check_circle: **Ventajas**: Acelera drásticamente el entrenamiento al reducir el tamaño total del set de datos.\n\n"
-                    ":material/cancel: **Desventajas**: Desecha cerca del 80% del historial de datos, perdiendo valiosa información sobre patrones geográficos y temporales complejos."
-                )
 
     with tab_architecture:
         col_a1, col_a2 = st.columns([3, 2])
@@ -482,6 +481,14 @@ def show_inicio():
                 text=[f"{metrics['acc_hybrid']*100:.2f}%", f"{metrics['f1_hybrid']*100:.2f}%"],
                 textposition='auto'
             ))
+            fig_metrics.add_trace(go.Bar(
+                x=['Accuracy (Precisión)', 'F1-Score (Macro)'],
+                y=[metrics['acc_xgboost'] * 100, metrics['f1_xgboost'] * 100],
+                name='XGBoost (Challenger)',
+                marker_color='#2ca02c',
+                text=[f"{metrics['acc_xgboost']*100:.2f}%", f"{metrics['f1_xgboost']*100:.2f}%"],
+                textposition='auto'
+            ))
             fig_metrics.update_layout(
                 barmode='group',
                 title='Calidad Predictiva (Valores en Porcentaje)',
@@ -512,6 +519,14 @@ def show_inicio():
                 name='MLP Híbrido (GA)',
                 marker_color='#8A2387',
                 text=[f"{metrics['train_hybrid']:.1f} s", f"{metrics['time_hybrid']*1000:.2f} ms"],
+                textposition='auto'
+            ))
+            fig_time.add_trace(go.Bar(
+                x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
+                y=[metrics['train_xgboost'], metrics['time_xgboost'] * 1000],
+                name='XGBoost (Challenger)',
+                marker_color='#2ca02c',
+                text=[f"{metrics['train_xgboost']:.1f} s", f"{metrics['time_xgboost']*1000:.2f} ms"],
                 textposition='auto'
             ))
             fig_time.update_layout(

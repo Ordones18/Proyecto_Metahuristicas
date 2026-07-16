@@ -53,17 +53,24 @@ else:
     
     with st.container(border=True):
         st.subheader("Configuración del Entrenamiento")
-        st.write("Defina el método de balanceo y presione el botón inferior para sintonizar los hiperparámetros con el Algoritmo Genético y entrenar las redes neuronales.")
-        balance_method = st.selectbox("Método de Balanceo de Clases (Fase ETL)", ["smote", "under", "weight"])
+        st.write("El pipeline está configurado para utilizar **Class Weights (Pesos de Clase)** como método de balanceo debido a su rigurosidad científica (sin inventar datos sintéticos ni desechar registros históricos).")
+        balance_method = "weight"
+    
+    # Contenedor para el log anterior (se limpia al iniciar un nuevo entrenamiento)
+    log_placeholder = st.empty()
     
     # Mostrar logs anteriores si existen para persistencia
     if os.path.exists(log_file_path) and os.path.getsize(log_file_path) > 0:
-        st.subheader("Bitácora del Último Entrenamiento Realizado")
-        with open(log_file_path, 'r', encoding='utf-8') as f:
-            old_logs = f.read()
-        st.code(old_logs, language="text")
+        with log_placeholder.container():
+            st.subheader("Bitácora del Último Entrenamiento Realizado")
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+                old_logs = f.read()
+            st.code(old_logs, language="text")
         
     if st.button("Iniciar Pipeline Completo de Entrenamiento", use_container_width=True):
+        # Limpiar inmediatamente el log anterior en la UI para evitar acumulación visual
+        log_placeholder.empty()
+        
         st.write("---")
         st.info("Iniciando pipeline de entrenamiento. Esto puede tomar unos minutos...")
         
@@ -118,6 +125,11 @@ else:
             status_box.info("Ejecutando Fase 5: Optimización con Algoritmo Genético (Modelo Híbrido)...")
             from src.model_hybrid import train_hybrid_model
             train_hybrid_model()
+            
+            # FASE 5.5: Modelo XGBoost (Challenger)
+            status_box.info("Ejecutando Fase 5.5: Entrenamiento de Modelo XGBoost (Challenger)...")
+            from src.model_xgboost import train_xgboost_model
+            train_xgboost_model()
             
             # FASE 6: Evaluación y Comparación
             status_box.info("Ejecutando Fase 6: Evaluación y Comparación...")

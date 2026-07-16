@@ -1,9 +1,22 @@
 import os
 import sys
+
+# Desactivar compilación XLA para evitar errores de Autotuner en WSL2/GPU
+os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices=false'
+
 import time
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+
+# Configuración de crecimiento de memoria dinámico para GPU
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        pass
 from tensorflow.keras import layers, models, optimizers, callbacks
 import joblib
 
@@ -43,7 +56,8 @@ def build_mlp(input_shape, n_layers=2, neurons=128, activation='relu', dropout=0
     model.compile(
         optimizer=opt,
         loss='binary_crossentropy',
-        metrics=['accuracy', tf.keras.metrics.AUC(name='auc'), tf.keras.metrics.Precision(name='precision'), tf.keras.metrics.Recall(name='recall')]
+        metrics=['accuracy', tf.keras.metrics.AUC(name='auc'), tf.keras.metrics.Precision(name='precision'), tf.keras.metrics.Recall(name='recall')],
+        jit_compile=False
     )
     return model
 

@@ -1,10 +1,23 @@
 import os
 import sys
+
+# Desactivar compilación XLA para evitar errores de Autotuner en WSL2/GPU
+os.environ['TF_XLA_FLAGS'] = '--tf_xla_enable_xla_devices=false'
+
 import time
 import random
 import pandas as pd
 import numpy as np
 import tensorflow as tf
+
+# Configuración de crecimiento de memoria dinámico para GPU
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        pass
 from tensorflow.keras import layers, models, optimizers, callbacks
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
@@ -64,7 +77,7 @@ def build_and_compile_mlp(input_shape, params):
     else:
         opt = optimizers.Adam(learning_rate=params['learning_rate'])
         
-    model.compile(optimizer=opt, loss='binary_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=opt, loss='binary_crossentropy', metrics=['accuracy'], jit_compile=False)
     return model
 
 
@@ -96,12 +109,17 @@ def eval_individual(individual):
         y_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'y_train.csv')).values.ravel()
 
         # Tomar una muestra representativa fija para evaluar el fitness rápidamente
-        # 1500 registros estratificados para evaluación de fitness en validación cruzada
-        df_temp = X_train_full.copy()
-        df_temp['target'] = y_train_full
-        sample_df = df_temp.groupby('target', group_keys=False).apply(lambda x: x.sample(min(len(x), 750), random_state=RANDOM_SEED))
-        X_fitness_sample = sample_df.drop(columns=['target']).values
-        y_fitness_sample = sample_df['target'].values
+        # 1500 registros estratificados para evaluación de fitness en validación cruzada (pandas 2.x compatible)
+        samples = []
+        for val in np.unique(y_train_full):
+            mask = (y_train_full == val)
+            class_subset = X_train_full[mask]
+            class_sample = class_subset.sample(min(len(class_subset), 1000), random_state=RANDOM_SEED)
+            samples.append(class_sample)
+            
+        df_selected = pd.concat(samples, axis=0)
+        X_fitness_sample = df_selected.values
+        y_fitness_sample = y_train_full[df_selected.index]
 
     params = decode_chromosome(individual)
     

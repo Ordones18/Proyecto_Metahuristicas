@@ -18,7 +18,7 @@ El dataset original consta de **75,680 registros** oficiales con **28 variables*
    - `motivo_desaparicion`, `motivacion_desaparicion_observada` (se definen en la investigación posterior).
    - `estado_desaparecido` (se correlaciona directamente con la etiqueta objetivo).
 2. **Desbalanceo Severo de Clases**: 
-   La clase mayoritaria (*Localizada*) representa el **~93.18%** de los datos, lo que sesgaría a un clasificador básico a predecir siempre "Encontrado". Se implementó un pipeline flexible en la etapa ETL que permite alternar entre **SMOTE**, **Submuestreo aleatorio** y **Pesos de Clase (Class Weights)** para balancear el aprendizaje.
+   La clase mayoritaria (*Localizada*) representa el **~93.18%** de los datos, lo que sesgaría a un clasificador básico a predecir siempre "Encontrado". Se consolidó de forma exclusiva la técnica de **Class Weights (Pesos de Clase)** en la función de costo, descartando SMOTE (evita inventar coordenadas o datos sintéticos ruidosos) y Under-sampling (evita la pérdida masiva de 60,000 registros reales).
 3. **Restricción de Ejecución Local (Pillow DLL Block)**:
    Debido a directivas locales del sistema que bloquean binarios compilados de Pillow, se diseñó una arquitectura de desacoplamiento de imports que permite que el entrenamiento evolutivo del Algoritmo Genético y la visualización sigan funcionando mediante **Plotly interactivo en memoria (renderizado en el navegador)** sin depender de Matplotlib o SHAP estático.
 
@@ -33,7 +33,7 @@ graph TD
     A[Datos Crudos Excel] --> B[Fase 1: ETL & Codificación de Alta Cardinalidad]
     B --> C[Fase 2: Selección de Variables por Consenso]
     C --> D[Fase 3: Optimización Evolutiva - Algoritmo Genético]
-    D --> E[Fase 4: Entrenamiento MLP Híbrido con Pesos de Clase]
+    D --> E[Fase 4: Entrenamiento MLP Híbrido GA & XGBoost RandomSearch]
     E --> F[Fase 5: Validación Estadística - Test de McNemar]
     F --> G[Fase 6: Explicabilidad Local LIME & Dashboard Streamlit]
 ```
@@ -57,37 +57,34 @@ La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas 
 - **Operadores**: Selección por Torneo ($k=3$), Cruce de Dos Puntos ($p_x = 0.7$), Mutación Uniforme ($p_m = 0.2$) y Elitismo del mejor individuo.
 - **Función Fitness**: Maximización del **Macro F1-Score** obtenido a través de validación cruzada estratificada sobre el conjunto de entrenamiento.
 
-### 4. Validación Científica y Explicabilidad (XAI)
-- **Significancia Estadística (Test de McNemar)**: Determina si el incremento de rendimiento del modelo híbrido optimizado sobre el MLP base es estadísticamente significativo analizando las tablas de contingencia de predicciones correctas/incorrectas.
-- **Interpretabilidad Local (LIME)**: Rompe el paradigma de la "caja negra" de las redes neuronales, generando regresiones lineales locales que explican visualmente al usuario qué variables individuales (ej. edad, sexo, provincia) aumentaron o disminuyeron la probabilidad de localización en cada predicción en tiempo real.
+### 4. Modelo de Gradient Boosting Challenger (XGBoost)
+Como contraste metodológico y estándar de la industria, se entrena secuencialmente un modelo **XGBoost (Extreme Gradient Boosting)** sobre el mismo set de datos preprocesado.
+- **Sintonización Tradicional:** Se optimizan sus hiperparámetros de profundidad, estimadores y tasa de aprendizaje de forma automática utilizando **RandomizedSearchCV** con validación cruzada estratificada de 3-folds.
+
+### 5. Validación Científica y Explicabilidad (XAI)
+- **Significancia Estadística (Test de McNemar)**: Determina si las diferencias predictivas entre el MLP Base, el MLP Híbrido y el XGBoost son estadísticamente significativas analizando las tablas de contingencia de aciertos y desaciertos conjuntos.
+- **Interpretabilidad Local (LIME)**: Rompe el paradigma de la "caja negra" de los modelos supervisados, generando regresiones lineales locales que explican visualmente al usuario qué variables individuales (ej. edad, sexo, provincia) aumentaron o disminuyeron la probabilidad de localización en cada predicción en tiempo real.
 
 ---
 
-## ⚖️ Métodos de Balanceo de Clases
-
-- **SMOTE (Remuestreo Sintético)**:
-  - *Funcionamiento*: Genera muestras sintéticas de la clase minoritaria interpolando variables entre vecinos más cercanos.
-  - *Justificación*: Ideal para maximizar el **Recall** (sensibilidad para detectar personas no localizadas) sin desechar registros, incrementando ligeramente el tiempo de cómputo.
-- **Under-sampling (Submuestreo)**:
-  - *Funcionamiento*: Elimina aleatoriamente muestras de la clase mayoritaria hasta lograr una proporción 50/50.
-  - *Justificación*: Recomendado para prototipado rápido y entornos de recursos limitados, a costa de perder información histórica valiosa.
-- **Class Weights (Pesos de Clase)**:
-  - *Funcionamiento*: Multiplica la función de costo (Binary Cross-entropy) asignándole mayor penalización a los errores sobre la clase minoritaria.
-  - *Justificación*: Enfoque matemáticamente limpio y computacionalmente eficiente; entrena sobre el dataset real original sin añadir datos ficticios.
+## ⚖️ Estrategia de Balanceo de Clases
+Por rigurosidad científica y metodológica, el proyecto utiliza de forma exclusiva la técnica de **Class Weights (Pesos de Clase)**.
+* **Justificación:** A diferencia de **SMOTE**, no genera registros artificiales/ficticios que alterarían la veracidad de variables geográficas y temporales complejas. Y a diferencia de **Under-sampling**, no destruye cerca del 80% de los datos históricos del caso. Entrena sobre los 75,517 registros reales enteros aplicando mayor penalización en la función de costo a los errores de la clase minoritaria (No Localizado).
 
 ---
 
-## 📊 Resultados Experimentos Registrados
+## 📊 Resultados de los Modelos (Conjunto de Test)
 
-| Métrica | MLP Base (Sintonía Estática) | MLP Híbrido (Optimizado por GA) | Mejora Relativa |
-| :--- | :---: | :---: | :---: |
-| **Accuracy** | 75.99% | **78.20%** | **+2.90%** 🟢 |
-| **F1-Score (Macro)** | 0.5856 | **0.5993** | **+2.34%** 🟢 |
-| **Log Loss (Pérdida)** | 0.4795 | **0.4148** | **-13.50% (Reducción)** 🟢 |
-| **Tiempo de Inferencia** | 0.0265 ms | **0.0264 ms** | **-0.44% (Reducción)** 🟢 |
-| **Tiempo de Entrenamiento** | 19.96 s | **29.11 s** | **+45.85%** 🟡 |
+| Métrica | MLP Base (Estático) | MLP Híbrido (Optimizado por GA) | XGBoost (Challenger + RandomSearch) | Mejora Híbrido vs Base |
+| :--- | :---: | :---: | :---: | :---: |
+| **Accuracy (Exactitud)** | 74.89% | **76.99%** | 76.02% | **+2.81%** 🟢 |
+| **F1-Score (Macro)** | 0.5792 | **0.5919** | 0.5853 | **+2.19%** 🟢 |
+| **Log Loss (Pérdida)** | 0.4794 | 0.4731 | **0.4372** | **-1.31% (Reducción)** 🟢 |
+| **PR-AUC (Área PR)** | 0.9881 | 0.9859 | **0.9886** | **-0.22%** 🟡 |
+| **Tiempo de Entrenamiento** | 35.40 s | **6.46 s** | 15.43 s | **-81.76% (Reducción)** 🟢 |
+| **Latencia de Inferencia** | 0.0386 ms | **0.0286 ms** | 0.0398 ms | **-26.03% (Reducción)** 🟢 |
 
-- **Resultado del Test de McNemar**: El p-valor obtenido de **$0.00$** (con un estadístico $\chi^2 = 95.68$, muy inferior al nivel de significancia de $\alpha = 0.05$) demuestra que la diferencia en el rendimiento predictivo es **altamente significativa**. La sintonización evolutiva mediante Algoritmo Genético reduce el error de pérdida binaria y mejora sustancialmente la capacidad de generalización sobre el test set.
+- **Resultado de los Tests de McNemar**: El p-valor obtenido de **$0.00$** en la comparación MLP Base vs. Híbrido, y de **$2.67 \times 10^{-4}$** en la comparación MLP Híbrido vs. XGBoost, demuestra que las diferencias predictivas entre todos los modelos son **altamente significativas estadísticamente** (con un nivel de significancia de $\alpha = 0.05$). La sintonización evolutiva del GA sobre el MLP y la sintonización por RandomizedSearchCV en XGBoost proveen comportamientos predictivos diferenciados de alta calidad sobre el test set.
 
 ---
 
@@ -116,10 +113,12 @@ Proyecto/
 │   ├── feature_engineering.py      # Filtro de variables por consenso y fallback dinámico
 │   ├── model_base.py               # Entrenamiento del modelo estático con logs compactos
 │   ├── model_hybrid.py             # Estructuración y corrida de DEAP con logs compactos
+│   ├── model_xgboost.py            # Entrenamiento y sintonía fina de XGBoost (Challenger)
 │   ├── evaluation.py               # Test de McNemar y curvas ROC/PR
 │   └── interpretability.py         # Explicabilidad local y global
 ├── main.py                         # Orquestador del pipeline completo en consola
 ├── requirements.txt                # Dependencias fijadas del proyecto
+├── DOCUMENTACION.md                # Apoyo teórico y metodológico para la tesis
 └── README.md                       # Documentación principal
 ```
 
@@ -127,60 +126,151 @@ Proyecto/
 
 ## 🚀 Instrucciones de Configuración y Ejecución
 
-Para reproducir este proyecto, entrenar los modelos y explorar los resultados científicos, siga detalladamente los siguientes pasos:
+Para reproducir este proyecto, entrenar los modelos y explorar los resultados científicos, sigue detalladamente los siguientes pasos según el entorno de tu preferencia:
 
-### Paso 1: Clonar el Repositorio e Instalar Dependencias
-1. Abra una terminal en su máquina local.
-2. Clone este repositorio de GitHub:
+---
+
+### Opción A: Instalación y Ejecución en Windows (Solo CPU)
+Esta opción es ideal para un inicio rápido o si no cuentas con una tarjeta gráfica NVIDIA compatible. Cabe recalcar que TensorFlow >= 2.11 no soporta GPU de forma nativa en Windows, por lo que todo el pipeline se ejecutará en la CPU.
+
+1. **Clonar el Repositorio:**
    ```bash
    git clone https://github.com/Ordones18/Proyecto_Metahuristicas.git
    cd Proyecto_Metahuristicas
    ```
-3. Instale las dependencias de Python fijadas en `requirements.txt`:
+2. **Crear y Activar un Entorno Virtual de Python:**
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate
+   ```
+3. **Instalar Dependencias:**
    ```bash
    pip install -r requirements.txt
    ```
-   *Nota: El dataset Excel original `mdi_personasdesaparecidas_pm_2017_2025.xlsx` ya se encuentra precargado en la raíz del repositorio, por lo que no es necesario descargarlo o colocarlo manualmente.*
+4. **Lanzar la Aplicación Streamlit:**
+   ```bash
+   streamlit run app/app.py
+   ```
 
-### Paso 2: Lanzar la Aplicación Streamlit
-Inicie el servidor de la aplicación web:
-```bash
-streamlit run app/app.py
-```
+---
 
-### 🐧 Ejecución en WSL (Para habilitar Soporte de GPU)
-Si deseas entrenar los modelos utilizando la GPU (tarjeta gráfica) en Windows, es necesario usar WSL2, ya que TensorFlow 2.11+ no soporta GPU de forma nativa en Windows.
+### Opción B: Ejecución en WSL2 (Recomendada - Con Aceleración GPU)
+Si cuentas con una GPU NVIDIA (como la RTX 5060 Ti) y deseas acelerar el entrenamiento del MLP Híbrido mediante CUDA, es necesario ejecutar el proyecto dentro de WSL2 (Windows Subsystem for Linux).
 
-Hemos incluido un script automatizado `run_wsl.sh` para facilitar este proceso:
+Hemos incluido un script de automatización (`run_wsl.sh`) que prepara el entorno y activa las dependencias automáticamente:
 
-1. Abre tu terminal de WSL (por ejemplo, Ubuntu).
-2. Asegúrate de tener instalado Python 3 y `venv`:
+1. **Preparar WSL:** Abre tu terminal de WSL (por ejemplo, Ubuntu) e instala las librerías del sistema requeridas:
    ```bash
    sudo apt update && sudo apt install python3 python3-pip python3-venv -y
    ```
-3. Otorga permisos de ejecución al script y ejecútalo:
+
+2. **Instalar el toolkit de CUDA de NVIDIA** (necesario para que `nvcc` esté disponible y para compatibilidad con GPUs modernas como la serie RTX 50xx Blackwell):
+   ```bash
+   sudo apt install nvidia-cuda-toolkit
+   ```
+   > **Nota:** Este comando instala las herramientas de compilación CUDA a nivel de sistema. Las librerías de runtime (cuDNN, cuBLAS, etc.) que TensorFlow usa en tiempo de ejecución las gestiona automáticamente `tensorflow[and-cuda]` vía pip — no es necesario instalarlas manualmente.
+
+3. **Dar permisos y ejecutar el instalador:**
    ```bash
    chmod +x run_wsl.sh
    ./run_wsl.sh
    ```
-El script creará un entorno virtual aislado para Linux (`.venv_wsl`), instalará las dependencias necesarias y te permitirá iniciar el pipeline de entrenamiento o lanzar el dashboard interactivo de Streamlit.
+   *El script creará un entorno virtual aislado (`.venv_wsl`), instalará `xgboost`, `tensorflow` con soporte CUDA, configurará automáticamente las rutas de librerías GPU desde los paquetes `nvidia-*` de pip, verificará la detección de tu GPU y te ofrecerá un menú interactivo para arrancar el pipeline o levantar Streamlit.*
 
-Si prefieres activar el entorno de WSL y ejecutar Streamlit manualmente después de haber configurado el entorno, puedes hacerlo ejecutando:
-```bash
-# 1. Activar el entorno de WSL (asegúrate de haberlo creado e instalado las dependencias)
-source .venv_wsl/bin/activate
-# 2. Ejecutar Streamlit con la sintaxis correcta
-streamlit run app/app.py
-```
+4. **Ejecución Manual en WSL:** Si prefieres arrancar Streamlit manualmente en el futuro sin utilizar el script interactivo, recuerda exportar las rutas de drivers de la GPU para que TensorFlow la reconozca:
+   ```bash
+   source .venv_wsl/bin/activate
 
-### Paso 3: Entrenar los Modelos y Explorar Resultados
-Una vez abierta la aplicación en su navegador web:
-1. **Entrene el Pipeline**: Navegue al menú lateral en **"Entrenamiento"**, seleccione la estrategia de balanceo de clases (SMOTE, Submuestreo o Pesos) y haga clic en **"Iniciar Pipeline Completo de Entrenamiento"**.
-   - *Nota: La consola web transmitirá las salidas en tiempo real y guardará el historial de logs de forma persistente. No necesita volver a entrenar la próxima vez que abra la aplicación.*
-2. **Explore el Dashboard**: Revise mapas de calor geográficos y KPIs demográficos calculados dinámicamente.
-3. **Realice Predicciones**: Ingrese casos de prueba individuales para estimar el riesgo de localización en tiempo real y obtener explicaciones LIME interactivas.
-4. **Compare y Descargue**: Analice las curvas ROC/PR, matrices de confusión y descargue el artículo en formato IEEE o reportes detallados en PDF y Excel.
+   # Configurar LD_LIBRARY_PATH con las libs CUDA de pip
+   export LD_LIBRARY_PATH=$(python3 -c "
+   import site, os
+   sp = site.getsitepackages()[0]
+   d = os.path.join(sp, 'nvidia')
+   paths = [os.path.join(d, p, 'lib') for p in os.listdir(d) if os.path.isdir(os.path.join(d, p, 'lib'))]
+   print(':'.join(paths))
+   "):/usr/lib/wsl/lib:$LD_LIBRARY_PATH
+
+   streamlit run app/app.py
+   ```
 
 ---
 
+### Opción C: Ejecución en Linux nativo con GPU AMD (ROCm)
 
+Si cuentas con una GPU AMD (como la RX 6000/7000 series o Instinct), TensorFlow puede aprovecharla mediante **ROCm** (Radeon Open Compute), el equivalente de AMD a CUDA.
+
+> ⚠️ **Importante:** ROCm solo funciona en **Linux nativo**. El soporte en WSL2 para AMD es experimental y no está garantizado. Se recomienda Ubuntu 22.04 o superior.
+
+#### GPUs AMD compatibles con ROCm
+Las principales GPUs de consumo soportadas son: RX Vega 56/64, Radeon VII, RX 5700 XT, RX 6600/6700/6800/6900 XT y RX 7700/7800/7900 XT. Puedes consultar la lista completa en la [documentación oficial de ROCm](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/reference/system-requirements.html).
+
+#### 1. Instalar ROCm
+
+```bash
+# Agregar repositorio oficial de AMD ROCm
+sudo apt update
+wget https://repo.radeon.com/amdgpu-install/6.1/ubuntu/jammy/amdgpu-install_6.1.60101-1_all.deb
+sudo dpkg -i amdgpu-install_6.1.60101-1_all.deb
+sudo apt update
+
+# Instalar ROCm y sus dependencias
+sudo amdgpu-install --usecase=rocm
+
+# Agregar tu usuario al grupo render y video
+sudo usermod -aG render,video $LOGNAME
+
+# Reiniciar sesión o reboot para aplicar los grupos
+```
+
+#### 2. Verificar que ROCm detecta la GPU
+
+```bash
+rocm-smi
+# Deberías ver tu GPU AMD listada con temperatura y uso
+```
+
+#### 3. Instalar TensorFlow con soporte ROCm
+
+AMD mantiene un fork oficial de TensorFlow con soporte ROCm (en lugar de `tensorflow[and-cuda]`):
+
+```bash
+source .venv_wsl/bin/activate
+
+# Instalar tensorflow-rocm (compatible con ROCm 6.x)
+pip install tensorflow-rocm
+```
+
+> **Nota:** `tensorflow-rocm` y `tensorflow[and-cuda]` **no son compatibles** entre sí. No instales ambos en el mismo entorno virtual.
+
+#### 4. Verificar detección de GPU AMD
+
+```bash
+python3 -c "
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+print('TF version:', tf.__version__)
+print('GPUs (ROCm):', gpus)
+"
+```
+
+#### Comparativa rápida: NVIDIA vs AMD
+
+| Aspecto | NVIDIA (CUDA) | AMD (ROCm) |
+|---|---|---|
+| **Ecosistema** | Maduro, amplio soporte | Más reciente, en crecimiento |
+| **TensorFlow** | `tensorflow[and-cuda]` (oficial) | `tensorflow-rocm` (AMD fork) |
+| **WSL2** | ✅ Soporte completo | ⚠️ Experimental / limitado |
+| **Linux nativo** | ✅ | ✅ |
+| **Compatibilidad de GPUs** | Muy amplia | Solo GPUs seleccionadas |
+
+
+Una vez abierta la aplicación en tu navegador web:
+1. **Entrenar el Pipeline:** Ve al menú lateral en **"Entrenamiento"** y haz clic en **"Iniciar Pipeline Completo de Entrenamiento"**. El sistema ejecutará secuencialmente:
+   * **ETL:** Carga y limpia los datos, aplicando target encoding y estructurando los pesos de clase.
+   * **EDA:** Genera reportes visuales descriptivos interactivos.
+   * **Selección por Consenso:** Reduce las variables a las 10 mejores.
+   * **Modelado:** Entrena el MLP Base, optimiza el MLP Híbrido mediante el Algoritmo Genético, y sintoniza el **XGBoost** mediante `RandomizedSearchCV`.
+   * **Evaluación & XAI:** Corre el Test de McNemar y prepara las explicaciones locales de LIME.
+2. **Explorar el Dashboard:** Revisa mapas de calor geográficos y KPIs demográficos calculados dinámicamente.
+3. **Realice Predicciones:** Ingresa casos de prueba individuales para estimar el riesgo de localización en tiempo real y obtener explicaciones LIME interactivas eligiendo cualquiera de los 3 modelos.
+4. **Comparar:** Analiza curvas ROC, Precision-Recall y matrices de confusión interactivas en la sección de **Comparación**.

@@ -110,7 +110,7 @@ def run_interpretability_pipeline():
         return np.hstack((prob_class_0, prob_class_1))
         
     exp = lime_explainer.explain_instance(
-        data_row=sample_instance,
+        data_row=sample_instance.values,
         predict_fn=lime_predict_func,
         num_features=5
     )
