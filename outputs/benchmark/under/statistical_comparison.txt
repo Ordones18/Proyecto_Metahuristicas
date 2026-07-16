@@ -1,9 +1,0 @@
-PRUEBA ESTADÍSTICA DE MCNEMAR
-=============================
-Estadístico Chi-cuadrado: 8.41138
-p-valor: 3.72880e-03
-Significancia (alfa=0.05): Diferencia Estadísticamente Significativa
-
-Interpretación:
-El modelo híbrido optimizado mediante Algoritmo Genético presenta un comportamiento predictivo
-significativamente diferente y superior al modelo base MLP, confirmando la efectividad de la metaheurística.
