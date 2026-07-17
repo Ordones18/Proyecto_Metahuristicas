@@ -56,3 +56,13 @@ GA_CONFIG = {
     'elitism_size': 1     # Número de mejores individuos a preservar intactos
 }
 
+# Configuración del PSO
+PSO_CONFIG = {
+    'swarm_size': 16,      # Tamaño de la población de partículas
+    'max_iter': 8,         # Número máximo de iteraciones
+    'w': 0.5,              # Peso de inercia
+    'c1': 1.5,             # Coeficiente de aceleración cognitivo
+    'c2': 1.5              # Coeficiente de aceleración social
+}
+
+

@@ -50,8 +50,7 @@ def load_prediction_resources():
     try:
         model_base = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_base.keras'))
         model_hybrid = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
-        
-        model_xgboost = joblib.load(os.path.join(MODELS_DIR, 'xgboost_model.joblib'))
+        model_pso = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_pso.keras'))
         
         scaler = joblib.load(os.path.join(MODELS_DIR, 'scaler.joblib'))
         ohe = joblib.load(os.path.join(MODELS_DIR, 'one_hot_encoder.joblib'))
@@ -71,7 +70,7 @@ def load_prediction_resources():
         return {
             'mlp_base': model_base,
             'mlp_hybrid': model_hybrid,
-            'xgboost': model_xgboost,
+            'mlp_pso': model_pso,
             'scaler': scaler,
             'ohe': ohe,
             'target_encoder': target_encoder,
@@ -92,12 +91,6 @@ else:
     target_encoder = resources['target_encoder']
     selected_features = resources['selected_features']
     lime_explainer = resources['lime_explainer']
-    
-    # Selector de modelo fuera de las columnas para mayor visibilidad
-    selected_model_name = st.selectbox(
-        "Modelo a utilizar para la Inferencia",
-        ["MLP Híbrido (GA)", "MLP Base", "XGBoost (Challenger)"]
-    )
     
     # Formulario en columnas
     with st.form("prediction_form"):
@@ -143,7 +136,7 @@ else:
                 st.error("La fecha seleccionada es inválida (por ejemplo, el día no existe en el mes seleccionado). Por favor verifique el día y el mes.")
                 st.stop()
             
-        submit_btn = st.form_submit_button("Realizar Predicción")
+        submit_btn = st.form_submit_button("Realizar Predicción Simultánea")
         
     if submit_btn:
         # Preprocesar datos de entrada
@@ -202,71 +195,83 @@ else:
         # 5. Seleccionar variables
         final_input = scaled_input[selected_features]
         
-        # Realizar Inferencia según el modelo seleccionado
-        if selected_model_name == "MLP Híbrido (GA)":
-            model = resources['mlp_hybrid']
-            pred_prob = model.predict(final_input, verbose=0)[0][0]
-            def predict_fn(x):
-                prob = model.predict(x, verbose=0).astype(np.float64)
-                return np.hstack((1.0 - prob, prob))
-        elif selected_model_name == "MLP Base":
-            model = resources['mlp_base']
-            pred_prob = model.predict(final_input, verbose=0)[0][0]
-            def predict_fn(x):
-                prob = model.predict(x, verbose=0).astype(np.float64)
-                return np.hstack((1.0 - prob, prob))
-        else:
-            model = resources['xgboost']
-            pred_prob = model.predict_proba(final_input)[0][1]
-            def predict_fn(x):
-                return model.predict_proba(x).astype(np.float64)
+        # Realizar Inferencia en los 3 modelos a la vez
+        # Modelo 1: MLP Base
+        model_base = resources['mlp_base']
+        pred_base = model_base.predict(final_input, verbose=0)[0][0]
+        
+        # Modelo 2: MLP Híbrido (GA)
+        model_ga = resources['mlp_hybrid']
+        pred_ga = model_ga.predict(final_input, verbose=0)[0][0]
+        
+        # Modelo 3: MLP Híbrido (PSO)
+        model_pso = resources['mlp_pso']
+        pred_pso = model_pso.predict(final_input, verbose=0)[0][0]
+        
+        # Función predictora para LIME (utiliza el modelo principal GA)
+        def predict_fn_ga(x):
+            prob = model_ga.predict(x, verbose=0).astype(np.float64)
+            return np.hstack((1.0 - prob, prob))
         
         # Mostrar resultado
-        st.subheader("Resultados de la Inferencia")
+        st.subheader("Resultados de la Inferencia Simultánea")
         
-        col_res1, col_res2 = st.columns([1, 1])
+        col_res1, col_res2, col_res3 = st.columns(3)
         
         with col_res1:
-            if pred_prob >= 0.5:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA ESTIMADA ({selected_model_name})<br><br>Probabilidad: {pred_prob*100:.2f}%<br>Confianza: Alta</div>', unsafe_allow_html=True)
-                risk_level = "Bajo"
+            st.markdown("<h4 style='text-align: center; color: #510A32;'>MLP Base</h4>", unsafe_allow_html=True)
+            if pred_base >= 0.5:
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_base*100:.2f}%</div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO DE NO LOCALIZACIÓN ({selected_model_name})<br><br>Probabilidad de Éxito: {pred_prob*100:.2f}%<br>Nivel de Riesgo: Crítico</div>', unsafe_allow_html=True)
-                risk_level = "Alto"
+                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_base*100:.2f}%</div>', unsafe_allow_html=True)
                 
         with col_res2:
-            # Explicación con LIME en tiempo real
-            st.subheader("Explicación Local del Modelo (LIME)")
-            
-            with st.spinner("Generando explicación del caso..."):
-                exp = lime_explainer.explain_instance(
-                    data_row=final_input.iloc[0].values,
-                    predict_fn=predict_fn,
-                    num_features=5
-                )
+            st.markdown("<h4 style='text-align: center; color: #FF4B4B;'>MLP Híbrido (GA)</h4>", unsafe_allow_html=True)
+            if pred_ga >= 0.5:
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_ga*100:.2f}%</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_ga*100:.2f}%</div>', unsafe_allow_html=True)
                 
-                # Renderizar explicación local con Plotly en lugar de Matplotlib
-                exp_list = exp.as_list()
-                df_exp = pd.DataFrame(exp_list, columns=['Variable', 'Contribucion'])
-                df_exp['Efecto'] = df_exp['Contribucion'].apply(
-                    lambda x: 'Favorece Localización (Positivo)' if x > 0 else 'Favorece No Localización (Negativo)'
-                )
-                fig = px.bar(
-                    df_exp,
-                    x='Contribucion',
-                    y='Variable',
-                    orientation='h',
-                    color='Efecto',
-                    color_discrete_map={
-                        'Favorece Localización (Positivo)': '#4CAF50',
-                        'Favorece No Localización (Negativo)': '#F44336'
-                    },
-                    title=f"Contribución de Variables a la Predicción ({selected_model_name})"
-                )
-                fig.update_layout(
-                    yaxis={'categoryorder': 'total ascending'},
-                    template="plotly_dark",
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    height=350
-                )
-                st.plotly_chart(fig, use_container_width=True)
+        with col_res3:
+            st.markdown("<h4 style='text-align: center; color: #2ca02c;'>MLP Híbrido (PSO)</h4>", unsafe_allow_html=True)
+            if pred_pso >= 0.5:
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_pso*100:.2f}%</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_pso*100:.2f}%</div>', unsafe_allow_html=True)
+                
+        # Explicación LIME del modelo principal debajo
+        st.markdown("---")
+        st.subheader("Explicabilidad Local (LIME) del Modelo Principal (MLP Híbrido GA)")
+        
+        with st.spinner("Generando explicación del caso con LIME..."):
+            exp = lime_explainer.explain_instance(
+                data_row=final_input.iloc[0].values,
+                predict_fn=predict_fn_ga,
+                num_features=5
+            )
+            
+            # Renderizar explicación local con Plotly
+            exp_list = exp.as_list()
+            df_exp = pd.DataFrame(exp_list, columns=['Variable', 'Contribucion'])
+            df_exp['Efecto'] = df_exp['Contribucion'].apply(
+                lambda x: 'Favorece Localización (Positivo)' if x > 0 else 'Favorece No Localización (Negativo)'
+            )
+            fig = px.bar(
+                df_exp,
+                x='Contribucion',
+                y='Variable',
+                orientation='h',
+                color='Efecto',
+                color_discrete_map={
+                    'Favorece Localización (Positivo)': '#4CAF50',
+                    'Favorece No Localización (Negativo)': '#F44336'
+                },
+                title="Contribución de Variables a la Predicción (MLP Híbrido GA)"
+            )
+            fig.update_layout(
+                yaxis={'categoryorder': 'total ascending'},
+                template="plotly_dark",
+                margin=dict(l=20, r=20, t=40, b=20),
+                height=350
+            )
+            st.plotly_chart(fig, use_container_width=True)

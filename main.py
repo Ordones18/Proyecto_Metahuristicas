@@ -22,7 +22,7 @@ from src.eda import generate_eda_plots
 from src.feature_engineering import select_features
 from src.model_base import train_base_model
 from src.model_hybrid import train_hybrid_model
-from src.model_xgboost import train_xgboost_model
+from src.model_pso import train_pso_model
 from src.evaluation import evaluate_models
 from src.interpretability import run_interpretability_pipeline
 
@@ -63,10 +63,10 @@ def main():
         train_hybrid_model()
         logging.info(f"Fase 5 completada con éxito en {time.time() - phase_start:.2f} segundos.\n")
         
-        # FASE 5.5: Modelo XGBoost (Challenger)
-        logging.info(">>> Iniciando Fase 5.5: Entrenamiento de Modelo XGBoost (Challenger)...")
+        # FASE 5.5: Modelo Híbrido MLP + PSO
+        logging.info(">>> Iniciando Fase 5.5: Optimización con Enjambre de Partículas (MLP + PSO)...")
         phase_start = time.time()
-        train_xgboost_model()
+        train_pso_model()
         logging.info(f"Fase 5.5 completada con éxito en {time.time() - phase_start:.2f} segundos.\n")
         
         # FASE 6: Evaluación y Comparación

@@ -71,7 +71,7 @@ def generate_pdf_report(metrics_df, mcnemar_text):
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(0, 10, "Prediccion de Personas Desaparecidas en Ecuador (2017-2025)", ln=True)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 10, "Reporte Comparativo del Modelo MLP Base vs MLP + GA (Hibrido)", ln=True)
+    pdf.cell(0, 10, "Reporte Comparativo: MLP Base vs MLP + GA vs MLP + PSO", ln=True)
     pdf.ln(5)
     
     # Resumen
@@ -79,9 +79,10 @@ def generate_pdf_report(metrics_df, mcnemar_text):
     pdf.cell(0, 8, "1. RESUMEN EJECUTIVO", ln=True)
     pdf.set_font("Helvetica", "", 10)
     pdf.multi_cell(0, 6, "Este reporte resume los hallazgos cientificos obtenidos al aplicar el algoritmo "
-                          "de redes neuronales multicapa (MLP) optimizadas mediante Algoritmos Geneticos para la "
-                          "prediccion del exito en la localizacion de personas desaparecidas en el Ecuador. "
-                          "Los datos utilizados corresponden a los registros oficiales depurados y sin fuga de informacion (leakage).")
+                          "de redes neuronales multicapa (MLP) optimizadas mediante Algoritmos Geneticos (GA) y "
+                          "Enjambre de Particulas (PSO) para la prediccion del exito en la localizacion de "
+                          "personas desaparecidas en el Ecuador. Los datos utilizados corresponden a los "
+                          "registros oficiales depurados y sin fuga de informacion (leakage).")
     pdf.ln(5)
     
     # Tabla de Métricas
@@ -91,22 +92,27 @@ def generate_pdf_report(metrics_df, mcnemar_text):
     
     # Columnas
     pdf.cell(35, 8, "Metrica", border=1)
-    pdf.cell(45, 8, "MLP Base", border=1)
-    pdf.cell(45, 8, "MLP Hibrido (GA)", border=1)
-    pdf.cell(45, 8, "Mejora (%)", border=1, ln=True)
+    pdf.cell(50, 8, "MLP Base", border=1)
+    pdf.cell(50, 8, "MLP Hibrido (GA)", border=1)
+    pdf.cell(50, 8, "MLP Hibrido (PSO)", border=1, ln=True)
     
     pdf.set_font("Helvetica", "", 9)
-    for col in metrics_df.columns:
-        if col == 'Modelo':
-            continue
-        val_base = metrics_df.iloc[0][col]
-        val_hyb = metrics_df.iloc[1][col]
-        val_delta = metrics_df.iloc[2][col]
+    
+    # Asegurar indexado por Modelo
+    if 'Modelo' in metrics_df.columns:
+        metrics_indexed = metrics_df.set_index('Modelo')
+    else:
+        metrics_indexed = metrics_df
+        
+    for col in metrics_indexed.columns:
+        val_base = metrics_indexed.loc['Base'][col] if 'Base' in metrics_indexed.index else 0.0
+        val_ga = metrics_indexed.loc['Hybrid'][col] if 'Hybrid' in metrics_indexed.index else 0.0
+        val_pso = metrics_indexed.loc['PSO'][col] if 'PSO' in metrics_indexed.index else 0.0
         
         pdf.cell(35, 8, str(col), border=1)
-        pdf.cell(45, 8, f"{val_base:.4f}" if isinstance(val_base, (int, float)) else str(val_base), border=1)
-        pdf.cell(45, 8, f"{val_hyb:.4f}" if isinstance(val_hyb, (int, float)) else str(val_hyb), border=1)
-        pdf.cell(45, 8, f"{val_delta:.2f}%" if isinstance(val_delta, (int, float)) else str(val_delta), border=1, ln=True)
+        pdf.cell(50, 8, f"{val_base:.4f}" if isinstance(val_base, (int, float)) else str(val_base), border=1)
+        pdf.cell(50, 8, f"{val_ga:.4f}" if isinstance(val_ga, (int, float)) else str(val_ga), border=1)
+        pdf.cell(50, 8, f"{val_pso:.4f}" if isinstance(val_pso, (int, float)) else str(val_pso), border=1, ln=True)
         
     pdf.ln(5)
     

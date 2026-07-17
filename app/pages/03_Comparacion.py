@@ -34,7 +34,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<h1 class="main-title">Comparación Científica de Modelos</h1>', unsafe_allow_html=True)
-st.write("Análisis estadístico e interactivo entre el Modelo Base (MLP) y el Modelo Híbrido Optimizado (MLP + GA).")
+st.write("Análisis estadístico e interactivo entre el Modelo Base (MLP) y los Modelos Híbridos Optimizados (MLP + GA y MLP + PSO).")
 
 # Cargar archivos de métricas básicos
 metrics_csv_path = os.path.join(REPORTS_DIR, 'model_comparison_metrics.csv')
@@ -53,33 +53,36 @@ def load_comparison_data():
         
         model_base = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_base.keras'))
         model_hybrid = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_hybrid.keras'))
-        
-        model_xgboost = joblib.load(os.path.join(models_dir, 'xgboost_model.joblib'))
+        model_pso = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_pso.keras'))
         
         probs_base = model_base.predict(X_test, verbose=0).ravel()
         probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
-        probs_xgboost = model_xgboost.predict_proba(X_test)[:, 1]
+        probs_pso = model_pso.predict(X_test, verbose=0).ravel()
         
         preds_base = (probs_base >= 0.5).astype(int)
         preds_hybrid = (probs_hybrid >= 0.5).astype(int)
-        preds_xgboost = model_xgboost.predict(X_test).ravel().astype(int)
+        preds_pso = (probs_pso >= 0.5).astype(int)
         
         hist_base = joblib.load(os.path.join(models_dir, 'mlp_base_history.joblib'))
         hist_hybrid = joblib.load(os.path.join(models_dir, 'mlp_hybrid_history.joblib'))
+        hist_pso = joblib.load(os.path.join(models_dir, 'mlp_pso_history.joblib'))
         
         ga_results = joblib.load(os.path.join(models_dir, 'ga_comparison_results.joblib'))
+        pso_results = joblib.load(os.path.join(models_dir, 'pso_comparison_results.joblib'))
         
         return {
             'y_test': y_test,
             'probs_base': probs_base,
             'probs_hybrid': probs_hybrid,
-            'probs_xgboost': probs_xgboost,
+            'probs_pso': probs_pso,
             'preds_base': preds_base,
             'preds_hybrid': preds_hybrid,
-            'preds_xgboost': preds_xgboost,
+            'preds_pso': preds_pso,
             'hist_base': hist_base,
             'hist_hybrid': hist_hybrid,
+            'hist_pso': hist_pso,
             'ga_results': ga_results,
+            'pso_results': pso_results,
             'success': True
         }
     except Exception as e:
@@ -110,7 +113,7 @@ else:
         "Curvas ROC y PR", 
         "Matrices de Confusión", 
         "Historial de Entrenamiento", 
-        "Evolución del Algoritmo Genético"
+        "Evolución Metaheurística (GA & PSO)"
     ])
     
     if not comp_data.get('success', False):
@@ -122,15 +125,15 @@ else:
             # ROC Curve
             fpr_b, tpr_b, _ = roc_curve(comp_data['y_test'], comp_data['probs_base'])
             fpr_h, tpr_h, _ = roc_curve(comp_data['y_test'], comp_data['probs_hybrid'])
-            fpr_x, tpr_x, _ = roc_curve(comp_data['y_test'], comp_data['probs_xgboost'])
+            fpr_p, tpr_p, _ = roc_curve(comp_data['y_test'], comp_data['probs_pso'])
             auc_base = auc(fpr_b, tpr_b)
             auc_hybrid = auc(fpr_h, tpr_h)
-            auc_xgboost = auc(fpr_x, tpr_x)
+            auc_pso = auc(fpr_p, tpr_p)
             
             fig_roc = go.Figure()
             fig_roc.add_trace(go.Scatter(x=fpr_b, y=tpr_b, mode='lines', name=f'MLP Base (AUC = {auc_base:.4f})', line=dict(color='#1f77b4', width=3)))
-            fig_roc.add_trace(go.Scatter(x=fpr_h, y=tpr_h, mode='lines', name=f'MLP Híbrido (AUC = {auc_hybrid:.4f})', line=dict(color='#d62728', width=3)))
-            fig_roc.add_trace(go.Scatter(x=fpr_x, y=tpr_x, mode='lines', name=f'XGBoost (AUC = {auc_xgboost:.4f})', line=dict(color='#2ca02c', width=3)))
+            fig_roc.add_trace(go.Scatter(x=fpr_h, y=tpr_h, mode='lines', name=f'MLP GA (AUC = {auc_hybrid:.4f})', line=dict(color='#d62728', width=3)))
+            fig_roc.add_trace(go.Scatter(x=fpr_p, y=tpr_p, mode='lines', name=f'MLP PSO (AUC = {auc_pso:.4f})', line=dict(color='#2ca02c', width=3)))
             fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', line=dict(dash='dash', color='gray'), name='Límite Aleatorio'))
             fig_roc.update_layout(
                 title='Curva ROC Comparativa (Test Set)',
@@ -144,15 +147,15 @@ else:
             # PR Curve
             p_b, r_b, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_base'])
             p_h, r_h, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_hybrid'])
-            p_x, r_x, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_xgboost'])
+            p_p, r_p, _ = precision_recall_curve(comp_data['y_test'], comp_data['probs_pso'])
             pr_auc_b = auc(r_b, p_b)
             pr_auc_h = auc(r_h, p_h)
-            pr_auc_x = auc(r_x, p_x)
+            pr_auc_p = auc(r_p, p_p)
             
             fig_pr = go.Figure()
             fig_pr.add_trace(go.Scatter(x=r_b, y=p_b, mode='lines', name=f'MLP Base (PR-AUC = {pr_auc_b:.4f})', line=dict(color='#1f77b4', width=3)))
-            fig_pr.add_trace(go.Scatter(x=r_h, y=p_h, mode='lines', name=f'MLP Híbrido (PR-AUC = {pr_auc_h:.4f})', line=dict(color='#d62728', width=3)))
-            fig_pr.add_trace(go.Scatter(x=r_x, y=p_x, mode='lines', name=f'XGBoost (PR-AUC = {pr_auc_x:.4f})', line=dict(color='#2ca02c', width=3)))
+            fig_pr.add_trace(go.Scatter(x=r_h, y=p_h, mode='lines', name=f'MLP GA (PR-AUC = {pr_auc_h:.4f})', line=dict(color='#d62728', width=3)))
+            fig_pr.add_trace(go.Scatter(x=r_p, y=p_p, mode='lines', name=f'MLP PSO (PR-AUC = {pr_auc_p:.4f})', line=dict(color='#2ca02c', width=3)))
             fig_pr.update_layout(
                 title='Curva Precision-Recall Comparativa (Test Set)',
                 xaxis_title='Recall (Sensibilidad)',
@@ -172,7 +175,7 @@ else:
             
             cm_base = confusion_matrix(comp_data['y_test'], comp_data['preds_base'])
             cm_hybrid = confusion_matrix(comp_data['y_test'], comp_data['preds_hybrid'])
-            cm_xgboost = confusion_matrix(comp_data['y_test'], comp_data['preds_xgboost'])
+            cm_pso = confusion_matrix(comp_data['y_test'], comp_data['preds_pso'])
             labels = ['No Encontrado', 'Encontrado']
             
             fig_cm_b = px.imshow(
@@ -193,35 +196,38 @@ else:
                 color_continuous_scale='Reds',
                 labels=dict(x="Predicción", y="Realidad", color="Casos")
             )
-            fig_cm_h.update_layout(title='Matriz de Confusión - MLP Híbrido (GA)', template='plotly_dark', coloraxis_showscale=False)
+            fig_cm_h.update_layout(title='Matriz de Confusión - MLP GA', template='plotly_dark', coloraxis_showscale=False)
             
-            fig_cm_x = px.imshow(
-                cm_xgboost, 
+            fig_cm_p = px.imshow(
+                cm_pso, 
                 x=labels, 
                 y=labels, 
                 text_auto=True, 
                 color_continuous_scale='Greens',
                 labels=dict(x="Predicción", y="Realidad", color="Casos")
             )
-            fig_cm_x.update_layout(title='Matriz de Confusión - XGBoost', template='plotly_dark', coloraxis_showscale=False)
+            fig_cm_p.update_layout(title='Matriz de Confusión - MLP PSO', template='plotly_dark', coloraxis_showscale=False)
             
             with col1:
                 st.plotly_chart(fig_cm_b, use_container_width=True)
             with col2:
                 st.plotly_chart(fig_cm_h, use_container_width=True)
             with col3:
-                st.plotly_chart(fig_cm_x, use_container_width=True)
+                st.plotly_chart(fig_cm_p, use_container_width=True)
                 
         with tab3:
             col1, col2 = st.columns(2)
             hist_b = comp_data['hist_base']
             hist_h = comp_data['hist_hybrid']
+            hist_p = comp_data['hist_pso']
             
             fig_loss = go.Figure()
             fig_loss.add_trace(go.Scatter(y=hist_b['loss'], mode='lines', name='Base Train Loss', line=dict(dash='dash', color='#1f77b4')))
             fig_loss.add_trace(go.Scatter(y=hist_b['val_loss'], mode='lines', name='Base Val Loss', line=dict(color='#1f77b4', width=2)))
-            fig_loss.add_trace(go.Scatter(y=hist_h['loss'], mode='lines', name='Híbrido Train Loss', line=dict(dash='dash', color='#d62728')))
-            fig_loss.add_trace(go.Scatter(y=hist_h['val_loss'], mode='lines', name='Híbrido Val Loss', line=dict(color='#d62728', width=2)))
+            fig_loss.add_trace(go.Scatter(y=hist_h['loss'], mode='lines', name='GA Train Loss', line=dict(dash='dash', color='#d62728')))
+            fig_loss.add_trace(go.Scatter(y=hist_h['val_loss'], mode='lines', name='GA Val Loss', line=dict(color='#d62728', width=2)))
+            fig_loss.add_trace(go.Scatter(y=hist_p['loss'], mode='lines', name='PSO Train Loss', line=dict(dash='dash', color='#2ca02c')))
+            fig_loss.add_trace(go.Scatter(y=hist_p['val_loss'], mode='lines', name='PSO Val Loss', line=dict(color='#2ca02c', width=2)))
             fig_loss.update_layout(
                 title='Historial de Pérdida (Loss)',
                 xaxis_title='Época',
@@ -233,8 +239,10 @@ else:
             fig_acc = go.Figure()
             fig_acc.add_trace(go.Scatter(y=hist_b['accuracy'], mode='lines', name='Base Train Acc', line=dict(dash='dash', color='#1f77b4')))
             fig_acc.add_trace(go.Scatter(y=hist_b['val_accuracy'], mode='lines', name='Base Val Acc', line=dict(color='#1f77b4', width=2)))
-            fig_acc.add_trace(go.Scatter(y=hist_h['accuracy'], mode='lines', name='Híbrido Train Acc', line=dict(dash='dash', color='#d62728')))
-            fig_acc.add_trace(go.Scatter(y=hist_h['val_accuracy'], mode='lines', name='Híbrido Val Acc', line=dict(color='#d62728', width=2)))
+            fig_acc.add_trace(go.Scatter(y=hist_h['accuracy'], mode='lines', name='GA Train Acc', line=dict(dash='dash', color='#d62728')))
+            fig_acc.add_trace(go.Scatter(y=hist_h['val_accuracy'], mode='lines', name='GA Val Acc', line=dict(color='#d62728', width=2)))
+            fig_acc.add_trace(go.Scatter(y=hist_p['accuracy'], mode='lines', name='PSO Train Acc', line=dict(dash='dash', color='#2ca02c')))
+            fig_acc.add_trace(go.Scatter(y=hist_p['val_accuracy'], mode='lines', name='PSO Val Acc', line=dict(color='#2ca02c', width=2)))
             fig_acc.update_layout(
                 title='Historial de Exactitud (Accuracy)',
                 xaxis_title='Época',
@@ -250,14 +258,17 @@ else:
                 
         with tab4:
             ga_res = comp_data['ga_results']
-            fig_ga = go.Figure()
+            pso_res = comp_data['pso_results']
+            fig_meta = go.Figure()
             for mr, res in ga_res.items():
-                fig_ga.add_trace(go.Scatter(y=res['history'], mode='lines+markers', name=f'Mut Rate: {mr}', marker=dict(size=8)))
-            fig_ga.update_layout(
-                title='Evolución del Fitness Máximo según Tasa de Mutación',
-                xaxis_title='Generación',
+                fig_meta.add_trace(go.Scatter(y=res['history'], mode='lines+markers', name=f'GA (Mut Rate: {mr})', marker=dict(size=8)))
+            for w, res in pso_res.items():
+                fig_meta.add_trace(go.Scatter(y=res['history'], mode='lines+markers', name=f'PSO (Inertia w: {w})', marker=dict(size=8)))
+            fig_meta.update_layout(
+                title='Evolución del Fitness Máximo (GA vs PSO)',
+                xaxis_title='Generación / Iteración',
                 yaxis_title='Fitness Máximo (Macro F1-Score)',
                 template='plotly_dark',
                 hovermode='x unified'
             )
-            st.plotly_chart(fig_ga, use_container_width=True)
+            st.plotly_chart(fig_meta, use_container_width=True)

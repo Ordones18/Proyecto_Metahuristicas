@@ -68,13 +68,12 @@ def evaluate_models():
     print("  - Cargando modelos entrenados...")
     model_base = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_base.keras'))
     model_hybrid = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
-    
-    model_xgboost = joblib.load(os.path.join(MODELS_DIR, 'xgboost_model.joblib'))
+    model_pso = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_pso.keras'))
     
     # Cargar estadísticas de entrenamiento
     stats_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_stats.joblib'))
     stats_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_stats.joblib'))
-    stats_xgboost = joblib.load(os.path.join(MODELS_DIR, 'xgboost_stats.joblib'))
+    stats_pso = joblib.load(os.path.join(MODELS_DIR, 'mlp_pso_stats.joblib'))
     
     # 3. Predicciones e Inferencia
     print("  - Calculando predicciones y tiempos de inferencia...")
@@ -85,17 +84,17 @@ def evaluate_models():
     infer_time_base = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
     preds_base = (probs_base >= 0.5).astype(int)
     
-    # Modelo Híbrido
+    # Modelo Híbrido GA
     start_time = time.time()
     probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
     infer_time_hybrid = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
     preds_hybrid = (probs_hybrid >= 0.5).astype(int)
     
-    # XGBoost
+    # Modelo Híbrido PSO
     start_time = time.time()
-    probs_xgboost = model_xgboost.predict_proba(X_test)[:, 1]
-    infer_time_xgboost = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
-    preds_xgboost = model_xgboost.predict(X_test).ravel().astype(int)
+    probs_pso = model_pso.predict(X_test, verbose=0).ravel()
+    infer_time_pso = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
+    preds_pso = (probs_pso >= 0.5).astype(int)
     
     # 4. Calcular métricas
     metrics = {}
@@ -116,7 +115,7 @@ def evaluate_models():
     p_b, r_b, _ = precision_recall_curve(y_test, probs_base)
     metrics['Base']['PR-AUC'] = auc(r_b, p_b)
     
-    # Hybrid Model
+    # Hybrid Model GA
     metrics['Hybrid'] = {
         'Accuracy': accuracy_score(y_test, preds_hybrid),
         'Precision': precision_score(y_test, preds_hybrid, average='macro'),
@@ -128,33 +127,33 @@ def evaluate_models():
         'Inference_Time_ms': infer_time_hybrid
     }
     
-    # Calcular PR-AUC para modelo híbrido
+    # Calcular PR-AUC para modelo híbrido GA
     p_h, r_h, _ = precision_recall_curve(y_test, probs_hybrid)
     metrics['Hybrid']['PR-AUC'] = auc(r_h, p_h)
     
-    # XGBoost Model
-    metrics['XGBoost'] = {
-        'Accuracy': accuracy_score(y_test, preds_xgboost),
-        'Precision': precision_score(y_test, preds_xgboost, average='macro'),
-        'Recall': recall_score(y_test, preds_xgboost, average='macro'),
-        'F1-Score': f1_score(y_test, preds_xgboost, average='macro'),
-        'ROC-AUC': roc_auc_score(y_test, probs_xgboost),
-        'Log_Loss': log_loss(y_test, probs_xgboost),
-        'Train_Time': stats_xgboost['train_time'],
-        'Inference_Time_ms': infer_time_xgboost
+    # Hybrid Model PSO
+    metrics['PSO'] = {
+        'Accuracy': accuracy_score(y_test, preds_pso),
+        'Precision': precision_score(y_test, preds_pso, average='macro'),
+        'Recall': recall_score(y_test, preds_pso, average='macro'),
+        'F1-Score': f1_score(y_test, preds_pso, average='macro'),
+        'ROC-AUC': roc_auc_score(y_test, probs_pso),
+        'Log_Loss': log_loss(y_test, probs_pso),
+        'Train_Time': stats_pso['train_time'],
+        'Inference_Time_ms': infer_time_pso
     }
     
-    # Calcular PR-AUC para XGBoost
-    p_x, r_x, _ = precision_recall_curve(y_test, probs_xgboost)
-    metrics['XGBoost']['PR-AUC'] = auc(r_x, p_x)
+    # Calcular PR-AUC para PSO
+    p_p, r_p, _ = precision_recall_curve(y_test, probs_pso)
+    metrics['PSO']['PR-AUC'] = auc(r_p, p_p)
     
     df_metrics = pd.DataFrame(metrics).T
     
-    # Calcular mejoras porcentuales de Híbrido sobre Base
-    df_metrics.loc['Mejora (%)'] = ((df_metrics.loc['Hybrid'] - df_metrics.loc['Base']) / df_metrics.loc['Base']) * 100
+    # Calcular mejoras porcentuales de GA sobre Base
+    df_metrics.loc['Mejora GA (%)'] = ((df_metrics.loc['Hybrid'] - df_metrics.loc['Base']) / df_metrics.loc['Base']) * 100
     # Para Log Loss e Inferencia, menor es mejor, la mejora es inversa
-    df_metrics.loc['Mejora (%)', 'Log_Loss'] = ((df_metrics.loc['Base', 'Log_Loss'] - df_metrics.loc['Hybrid', 'Log_Loss']) / df_metrics.loc['Base', 'Log_Loss']) * 100
-    df_metrics.loc['Mejora (%)', 'Inference_Time_ms'] = ((df_metrics.loc['Base', 'Inference_Time_ms'] - df_metrics.loc['Hybrid', 'Inference_Time_ms']) / df_metrics.loc['Base', 'Inference_Time_ms']) * 100
+    df_metrics.loc['Mejora GA (%)', 'Log_Loss'] = ((df_metrics.loc['Base', 'Log_Loss'] - df_metrics.loc['Hybrid', 'Log_Loss']) / df_metrics.loc['Base', 'Log_Loss']) * 100
+    df_metrics.loc['Mejora GA (%)', 'Inference_Time_ms'] = ((df_metrics.loc['Base', 'Inference_Time_ms'] - df_metrics.loc['Hybrid', 'Inference_Time_ms']) / df_metrics.loc['Base', 'Inference_Time_ms']) * 100
     
     print(f"\n  - Tabla Comparativa de Métricas:\n{df_metrics.to_string()}")
     
@@ -163,15 +162,15 @@ def evaluate_models():
     
     # 5. Prueba de McNemar
     print("\n  - Ejecutando Test Estadístico de McNemar...")
-    print("    * Comparando MLP Base vs MLP Híbrido:")
+    print("    * Comparando MLP Base vs MLP GA:")
     stat_hybrid, p_val_hybrid = run_mcnemar_test(y_test, preds_base, preds_hybrid)
     significative_hybrid = p_val_hybrid < 0.05
     print(f"      Estadístico: {stat_hybrid:.5f}, p-valor: {p_val_hybrid:.5e} (Significativo: {significative_hybrid})")
     
-    print("    * Comparando MLP Híbrido vs XGBoost:")
-    stat_xgb, p_val_xgb = run_mcnemar_test(y_test, preds_hybrid, preds_xgboost)
-    significative_xgb = p_val_xgb < 0.05
-    print(f"      Estadístico: {stat_xgb:.5f}, p-valor: {p_val_xgb:.5e} (Significativo: {significative_xgb})")
+    print("    * Comparando MLP GA vs MLP PSO:")
+    stat_pso, p_val_pso = run_mcnemar_test(y_test, preds_hybrid, preds_pso)
+    significative_pso = p_val_pso < 0.05
+    print(f"      Estadístico: {stat_pso:.5f}, p-valor: {p_val_pso:.5e} (Significativo: {significative_pso})")
     
     # Guardar resultados estadísticos
     with open(os.path.join(REPORTS_DIR, 'statistical_comparison.txt'), 'w', encoding='utf-8') as f:
@@ -184,21 +183,21 @@ def evaluate_models():
         f.write(f"p-valor: {p_val_hybrid:.5e}\n")
         f.write(f"Significancia (alfa=0.05): {'Diferencia Estadísticamente Significativa' if significative_hybrid else 'Diferencia No Significativa'}\n")
         if significative_hybrid:
-            f.write("Interpretación: El modelo híbrido optimizado mediante Algoritmo Genético presenta un comportamiento predictivo\n")
-            f.write("significativamente diferente y superior al modelo base MLP, confirmando la efectividad de la metaheurística.\n\n")
+            f.write("Interpretación: El modelo híbrido GA presenta un comportamiento predictivo\n")
+            f.write("significativamente diferente y superior al modelo base MLP, confirmando la efectividad del Algoritmo Genético.\n\n")
         else:
             f.write("Interpretación: Las predicciones de ambos modelos no muestran discrepancias estadísticamente significativas.\n\n")
             
-        f.write("2. MLP Híbrido vs XGBoost (Challenger):\n")
+        f.write("2. MLP Híbrido (GA) vs MLP Híbrido (PSO):\n")
         f.write("----------------------------------------\n")
-        f.write(f"Estadístico Chi-cuadrado: {stat_xgb:.5f}\n")
-        f.write(f"p-valor: {p_val_xgb:.5e}\n")
-        f.write(f"Significancia (alfa=0.05): {'Diferencia Estadísticamente Significativa' if significative_xgb else 'Diferencia No Significativa'}\n")
-        if significative_xgb:
+        f.write(f"Estadístico Chi-cuadrado: {stat_pso:.5f}\n")
+        f.write(f"p-valor: {p_val_pso:.5e}\n")
+        f.write(f"Significancia (alfa=0.05): {'Diferencia Estadísticamente Significativa' if significative_pso else 'Diferencia No Significativa'}\n")
+        if significative_pso:
             f.write("Interpretación: Existe una diferencia estadísticamente significativa en el comportamiento predictivo\n")
-            f.write("entre el MLP Híbrido y XGBoost, evidenciando el impacto de las diferentes naturalezas de algoritmos y optimizaciones.\n")
+            f.write("entre el MLP Híbrido GA y el MLP Híbrido PSO, evidenciando el impacto de las diferentes metaheurísticas.\n")
         else:
-            f.write("Interpretación: Las discrepancias predictivas entre el MLP Híbrido y XGBoost no son estadísticamente significativas.\n")
+            f.write("Interpretación: Las discrepancias predictivas entre el MLP GA y el MLP PSO no son estadísticamente significativas.\n")
             
     # --- GRÁFICOS DE EVALUACIÓN ---
     if HAS_PLOTTING:
@@ -207,12 +206,12 @@ def evaluate_models():
         # 1. Curva ROC Comparativa
         fpr_b, tpr_b, _ = roc_curve(y_test, probs_base)
         fpr_h, tpr_h, _ = roc_curve(y_test, probs_hybrid)
-        fpr_x, tpr_x, _ = roc_curve(y_test, probs_xgboost)
+        fpr_p, tpr_p, _ = roc_curve(y_test, probs_pso)
         
         plt.figure(figsize=(10, 8))
         plt.plot(fpr_b, tpr_b, color='blue', lw=2, label=f'MLP Base (AUC = {metrics["Base"]["ROC-AUC"]:.4f})')
         plt.plot(fpr_h, tpr_h, color='red', lw=2, label=f'MLP Híbrido GA (AUC = {metrics["Hybrid"]["ROC-AUC"]:.4f})')
-        plt.plot(fpr_x, tpr_x, color='green', lw=2, label=f'XGBoost (AUC = {metrics["XGBoost"]["ROC-AUC"]:.4f})')
+        plt.plot(fpr_p, tpr_p, color='green', lw=2, label=f'MLP Híbrido PSO (AUC = {metrics["PSO"]["ROC-AUC"]:.4f})')
         plt.plot([0, 1], [0, 1], color='gray', linestyle='--')
         plt.xlim([0.0, 1.0])
         plt.ylim([0.0, 1.05])
@@ -228,7 +227,7 @@ def evaluate_models():
         plt.figure(figsize=(10, 8))
         plt.plot(r_b, p_b, color='blue', lw=2, label=f'MLP Base (PR-AUC = {metrics["Base"]["PR-AUC"]:.4f})')
         plt.plot(r_h, p_h, color='red', lw=2, label=f'MLP Híbrido GA (PR-AUC = {metrics["Hybrid"]["PR-AUC"]:.4f})')
-        plt.plot(r_x, p_x, color='green', lw=2, label=f'XGBoost (PR-AUC = {metrics["XGBoost"]["PR-AUC"]:.4f})')
+        plt.plot(r_p, p_p, color='green', lw=2, label=f'MLP Híbrido PSO (PR-AUC = {metrics["PSO"]["PR-AUC"]:.4f})')
         plt.xlabel('Recall (Sensibilidad)')
         plt.ylabel('Precision (Exactitud Predictiva)')
         plt.title('Curva Precision-Recall Comparativa (Conjunto de Test)')
@@ -241,7 +240,7 @@ def evaluate_models():
         print("  - Generando matrices de confusión...")
         cm_base = confusion_matrix(y_test, preds_base)
         cm_hybrid = confusion_matrix(y_test, preds_hybrid)
-        cm_xgboost = confusion_matrix(y_test, preds_xgboost)
+        cm_pso = confusion_matrix(y_test, preds_pso)
         
         fig, ax = plt.subplots(1, 3, figsize=(24, 7))
         
@@ -253,14 +252,14 @@ def evaluate_models():
         ax[0].set_yticklabels(['No Encontrado', 'Encontrado'])
         
         sns.heatmap(cm_hybrid, annot=True, fmt='d', cmap='Reds', ax=ax[1], cbar=False)
-        ax[1].set_title('Matriz de Confusión - MLP Híbrido (GA)')
+        ax[1].set_title('Matriz de Confusión - MLP GA')
         ax[1].set_xlabel('Predicción')
         ax[1].set_ylabel('Realidad')
         ax[1].set_xticklabels(['No Encontrado', 'Encontrado'])
         ax[1].set_yticklabels(['No Encontrado', 'Encontrado'])
         
-        sns.heatmap(cm_xgboost, annot=True, fmt='d', cmap='Greens', ax=ax[2], cbar=False)
-        ax[2].set_title('Matriz de Confusión - XGBoost')
+        sns.heatmap(cm_pso, annot=True, fmt='d', cmap='Greens', ax=ax[2], cbar=False)
+        ax[2].set_title('Matriz de Confusión - MLP PSO')
         ax[2].set_xlabel('Predicción')
         ax[2].set_ylabel('Realidad')
         ax[2].set_xticklabels(['No Encontrado', 'Encontrado'])
@@ -274,14 +273,17 @@ def evaluate_models():
         print("  - Generando historial de entrenamiento comparativo...")
         hist_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_history.joblib'))
         hist_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_history.joblib'))
+        hist_pso = joblib.load(os.path.join(MODELS_DIR, 'mlp_pso_history.joblib'))
         
         fig, ax = plt.subplots(1, 2, figsize=(16, 6))
         
         # Pérdida
         ax[0].plot(hist_base['loss'], label='Base Train Loss', color='blue', linestyle='--')
         ax[0].plot(hist_base['val_loss'], label='Base Val Loss', color='blue')
-        ax[0].plot(hist_hybrid['loss'], label='Híbrido Train Loss', color='red', linestyle='--')
-        ax[0].plot(hist_hybrid['val_loss'], label='Híbrido Val Loss', color='red')
+        ax[0].plot(hist_hybrid['loss'], label='GA Train Loss', color='red', linestyle='--')
+        ax[0].plot(hist_hybrid['val_loss'], label='GA Val Loss', color='red')
+        ax[0].plot(hist_pso['loss'], label='PSO Train Loss', color='green', linestyle='--')
+        ax[0].plot(hist_pso['val_loss'], label='PSO Val Loss', color='green')
         ax[0].set_title('Historial de Pérdida (Loss)')
         ax[0].set_xlabel('Época')
         ax[0].set_ylabel('Binary Crossentropy')
@@ -291,8 +293,10 @@ def evaluate_models():
         # Precisión / Exactitud (Accuracy)
         ax[1].plot(hist_base['accuracy'], label='Base Train Acc', color='blue', linestyle='--')
         ax[1].plot(hist_base['val_accuracy'], label='Base Val Acc', color='blue')
-        ax[1].plot(hist_hybrid['accuracy'], label='Híbrido Train Acc', color='red', linestyle='--')
-        ax[1].plot(hist_hybrid['val_accuracy'], label='Híbrido Val Acc', color='red')
+        ax[1].plot(hist_hybrid['accuracy'], label='GA Train Acc', color='red', linestyle='--')
+        ax[1].plot(hist_hybrid['val_accuracy'], label='GA Val Acc', color='red')
+        ax[1].plot(hist_pso['accuracy'], label='PSO Train Acc', color='green', linestyle='--')
+        ax[1].plot(hist_pso['val_accuracy'], label='PSO Val Acc', color='green')
         ax[1].set_title('Historial de Exactitud (Accuracy)')
         ax[1].set_xlabel('Época')
         ax[1].set_ylabel('Accuracy')
@@ -316,15 +320,15 @@ def evaluate_models():
         worksheet.write(0, 2, 'p-valor')
         worksheet.write(0, 3, 'Estadísticamente Significativo')
         
-        worksheet.write(1, 0, 'MLP Base vs MLP Híbrido')
+        worksheet.write(1, 0, 'MLP Base vs MLP GA')
         worksheet.write(1, 1, stat_hybrid)
         worksheet.write(1, 2, p_val_hybrid)
         worksheet.write(1, 3, 'SÍ' if significative_hybrid else 'NO')
         
-        worksheet.write(2, 0, 'MLP Híbrido vs XGBoost')
-        worksheet.write(2, 1, stat_xgb)
-        worksheet.write(2, 2, p_val_xgb)
-        worksheet.write(2, 3, 'SÍ' if significative_xgb else 'NO')
+        worksheet.write(2, 0, 'MLP GA vs MLP PSO')
+        worksheet.write(2, 1, stat_pso)
+        worksheet.write(2, 2, p_val_pso)
+        worksheet.write(2, 3, 'SÍ' if significative_pso else 'NO')
         
     print(f"  - Reporte de comparación en Excel guardado en: {excel_path}")
     print("[Evaluación] ¡Pipeline de evaluación finalizado con éxito!\n")

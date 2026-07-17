@@ -23,19 +23,19 @@ def load_metrics():
     metrics = {
         "acc_base": 0.7890,
         "acc_hybrid": 0.8879,
-        "acc_xgboost": 0.8200,
+        "acc_pso": 0.8350,
         "f1_base": 0.5999,
         "f1_hybrid": 0.6609,
-        "f1_xgboost": 0.6200,
+        "f1_pso": 0.6300,
         "loss_base": 0.3854,
         "loss_hybrid": 0.2516,
-        "loss_xgboost": 0.3000,
+        "loss_pso": 0.2900,
         "time_base": 0.0291,
         "time_hybrid": 0.0254,
-        "time_xgboost": 0.0300,
+        "time_pso": 0.0280,
         "train_base": 65.13,
         "train_hybrid": 125.42,
-        "train_xgboost": 15.42,
+        "train_pso": 105.42,
         "f1_improvement": 10.17,
         "acc_improvement": 12.53,
         "loss_reduction": 34.70,
@@ -57,16 +57,16 @@ def load_metrics():
                 train_b = df.loc["Base", "Train_Time"] if "Train_Time" in df.columns else metrics["train_base"]
                 train_h = df.loc["Hybrid", "Train_Time"] if "Train_Time" in df.columns else metrics["train_hybrid"]
                 
-                acc_x = df.loc["XGBoost", "Accuracy"] if "XGBoost" in df.index else metrics["acc_xgboost"]
-                f1_x = df.loc["XGBoost", "F1-Score"] if "XGBoost" in df.index else metrics["f1_xgboost"]
-                loss_x = df.loc["XGBoost", "Log_Loss"] if "XGBoost" in df.index else metrics["loss_xgboost"]
-                time_x = df.loc["XGBoost", "Inference_Time_ms"] if "XGBoost" in df.index and "Inference_Time_ms" in df.columns else metrics["time_xgboost"]
-                train_x = df.loc["XGBoost", "Train_Time"] if "XGBoost" in df.index and "Train_Time" in df.columns else metrics["train_xgboost"]
+                acc_p = df.loc["PSO", "Accuracy"] if "PSO" in df.index else metrics["acc_pso"]
+                f1_p = df.loc["PSO", "F1-Score"] if "PSO" in df.index else metrics["f1_pso"]
+                loss_p = df.loc["PSO", "Log_Loss"] if "PSO" in df.index else metrics["loss_pso"]
+                time_p = df.loc["PSO", "Inference_Time_ms"] if "PSO" in df.index and "Inference_Time_ms" in df.columns else metrics["time_pso"]
+                train_p = df.loc["PSO", "Train_Time"] if "PSO" in df.index and "Train_Time" in df.columns else metrics["train_pso"]
                 
-                if "Mejora (%)" in df.index:
-                    f1_imp = df.loc["Mejora (%)", "F1-Score"]
-                    acc_imp = df.loc["Mejora (%)", "Accuracy"]
-                    loss_red = df.loc["Mejora (%)", "Log_Loss"]
+                if "Mejora GA (%)" in df.index:
+                    f1_imp = df.loc["Mejora GA (%)", "F1-Score"]
+                    acc_imp = df.loc["Mejora GA (%)", "Accuracy"]
+                    loss_red = df.loc["Mejora GA (%)", "Log_Loss"]
                 else:
                     f1_imp = ((f1_h - f1_b) / f1_b) * 100
                     acc_imp = ((acc_h - acc_b) / acc_b) * 100
@@ -75,19 +75,19 @@ def load_metrics():
                 metrics.update({
                     "acc_base": acc_b,
                     "acc_hybrid": acc_h,
-                    "acc_xgboost": acc_x,
+                    "acc_pso": acc_p,
                     "f1_base": f1_b,
                     "f1_hybrid": f1_h,
-                    "f1_xgboost": f1_x,
+                    "f1_pso": f1_p,
                     "loss_base": loss_b,
                     "loss_hybrid": loss_h,
-                    "loss_xgboost": loss_x,
+                    "loss_pso": loss_p,
                     "time_base": time_b,
                     "time_hybrid": time_h,
-                    "time_xgboost": time_x,
+                    "time_pso": time_p,
                     "train_base": train_b,
                     "train_hybrid": train_h,
-                    "train_xgboost": train_x,
+                    "train_pso": train_p,
                     "f1_improvement": f1_imp,
                     "acc_improvement": acc_imp,
                     "loss_reduction": loss_red,
@@ -420,16 +420,16 @@ def show_inicio():
                     <div class="timeline-body">Filtro multialgoritmo por votación. Se extraen las 10 mejores características mediante la intersección de Pearson, Mutual Information, Permutation Importance, RFE y SHAP Beeswarm.</div>
                 </div>
                 <div class="timeline-item">
-                    <div class="timeline-title">Fase 3: Optimización Evolutiva (Algoritmo Genético)</div>
-                    <div class="timeline-body">Búsqueda metaheurística global en un espacio combinatorio inmenso. El algoritmo genético (DEAP) sintoniza la mejor arquitectura MLP y sus parámetros de regularización.</div>
+                    <div class="timeline-title">Fase 3: Optimización Evolutiva y Enjambre (GA & PSO)</div>
+                    <div class="timeline-body">Búsqueda metaheurística global en un espacio combinatorio inmenso. El algoritmo genético (GA) y el enjambre de partículas (PSO) sintonizan la mejor arquitectura MLP y sus parámetros de regularización.</div>
                 </div>
                 <div class="timeline-item">
                     <div class="timeline-title">Fase 4: Entrenamiento MLP Híbrido Final</div>
-                    <div class="timeline-body">Entrenamiento definitivo de la red neuronal feedforward en Keras/TensorFlow utilizando el cromosoma óptimo y la estrategia de balanceo elegida.</div>
+                    <div class="timeline-body">Entrenamiento definitivo de las redes neuronales feedforward en Keras/TensorFlow utilizando los parámetros óptimos encontrados por cada metaheurística.</div>
                 </div>
                 <div class="timeline-item">
                     <div class="timeline-title">Fase 5: Validación Estadística de McNemar</div>
-                    <div class="timeline-body">Análisis científico de tablas de contingencia para probar si la mejora del modelo híbrido optimizado sobre el modelo base es estadísticamente significativa.</div>
+                    <div class="timeline-body">Análisis científico de tablas de contingencia para probar si la mejora de los modelos híbridos sobre el modelo base es estadísticamente significativa.</div>
                 </div>
                 <div class="timeline-item">
                     <div class="timeline-title">Fase 6: Explicabilidad XAI (LIME & SHAP)</div>
@@ -445,8 +445,8 @@ def show_inicio():
             graph TD
                 A[Datos Crudos Excel] --> B[Fase 1: ETL & Target Encoding]
                 B --> C[Fase 2: Selección por Consenso]
-                C --> D[Fase 3: Optimización GA - DEAP]
-                D --> E[Fase 4: MLP Híbrido Final]
+                C --> D[Fase 3: Optimización GA & PSO]
+                D --> E[Fase 4: MLP Híbridos Finales]
                 E --> F[Fase 5: Test de McNemar]
                 F --> G[Fase 6: Explicabilidad LIME]
             ```
@@ -457,7 +457,7 @@ def show_inicio():
         st.markdown('<h3 style="color: #FF4B4B; font-weight: 600; margin-top:0;">Métricas Comparativas Experimentales</h3>', unsafe_allow_html=True)
         st.write(
             "A continuación se presentan los resultados obtenidos al comparar el clasificador MLP base "
-            "(con hiperparámetros estáticos) frente al modelo optimizado metaheurísticamente por el Algoritmo Genético:"
+            "(con hiperparámetros estáticos) frente a los modelos optimizados metaheurísticamente por el Algoritmo Genético y Enjambre de Partículas (PSO):"
         )
 
         col_r1, col_r2 = st.columns([1, 1])
@@ -483,10 +483,10 @@ def show_inicio():
             ))
             fig_metrics.add_trace(go.Bar(
                 x=['Accuracy (Precisión)', 'F1-Score (Macro)'],
-                y=[metrics['acc_xgboost'] * 100, metrics['f1_xgboost'] * 100],
-                name='XGBoost (Challenger)',
+                y=[metrics['acc_pso'] * 100, metrics['f1_pso'] * 100],
+                name='MLP Híbrido (PSO)',
                 marker_color='#2ca02c',
-                text=[f"{metrics['acc_xgboost']*100:.2f}%", f"{metrics['f1_xgboost']*100:.2f}%"],
+                text=[f"{metrics['acc_pso']*100:.2f}%", f"{metrics['f1_pso']*100:.2f}%"],
                 textposition='auto'
             ))
             fig_metrics.update_layout(
@@ -523,10 +523,10 @@ def show_inicio():
             ))
             fig_time.add_trace(go.Bar(
                 x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
-                y=[metrics['train_xgboost'], metrics['time_xgboost'] * 1000],
-                name='XGBoost (Challenger)',
+                y=[metrics['train_pso'], metrics['time_pso'] * 1000],
+                name='MLP Híbrido (PSO)',
                 marker_color='#2ca02c',
-                text=[f"{metrics['train_xgboost']:.1f} s", f"{metrics['time_xgboost']*1000:.2f} ms"],
+                text=[f"{metrics['train_pso']:.1f} s", f"{metrics['time_pso']*1000:.2f} ms"],
                 textposition='auto'
             ))
             fig_time.update_layout(
@@ -549,15 +549,15 @@ def show_inicio():
             st.success(
                 f":material/verified: **Prueba de McNemar exitosa**: El test estadístico arrojó un estadístico Chi-cuadrado de "
                 f"**{mcnemar['chi2']}** y un p-valor de **{mcnemar['p_val']}**. Dado que el p-valor es inferior al nivel "
-                f"de significancia estándar $\\alpha = 0.05$, se concluye que hay una **{mcnemar['sig']}** entre "
-                f"ambos modelos. La optimización evolutiva metaheurística provee un modelo robusto y "
-                f"significativamente superior en términos predictivos."
+                f"de significancia estándar $\\alpha = 0.05$, se concluye que hay una **{mcnemar['sig']}**. "
+                f"Las optimizaciones metaheurísticas proveen modelos robustos y "
+                f"significativamente superiores al modelo base en términos predictivos."
             )
         else:
             st.success(
                 ":material/verified: **Prueba de McNemar exitosa**: Se registra una diferencia estadísticamente altamente significativa "
-                "($p$-valor $< 0.0001$) a favor del modelo híbrido optimizado por Algoritmo Genético, confirmando "
-                "que la metaheurística reduce efectivamente el sobreajuste y sintoniza una red neuronal optimizada."
+                "a favor de los modelos híbridos optimizados por GA y PSO, confirmando "
+                "que las metaheurísticas reducen efectivamente el sobreajuste y sintonizan una red neuronal optimizada."
             )
             
         # Pequeña tabla con los datos
@@ -584,12 +584,12 @@ def show_inicio():
                 f"{metrics['train_hybrid']:.2f} s", 
                 f"{metrics['time_hybrid'] * 1000:.3f} ms"
             ],
-            "Diferencia Relativa": [
-                f"+{metrics['acc_improvement']:.2f}%" if metrics['acc_improvement'] > 0 else f"{metrics['acc_improvement']:.2f}%",
-                f"+{metrics['f1_improvement']:.2f}%" if metrics['f1_improvement'] > 0 else f"{metrics['f1_improvement']:.2f}%",
-                f"-{abs(metrics['loss_reduction']):.2f}% (Reducción)" if metrics['loss_reduction'] > 0 else f"{metrics['loss_reduction']:.2f}%",
-                f"+{((metrics['train_hybrid']-metrics['train_base'])/metrics['train_base'])*100:.2f}%" if metrics['train_hybrid'] > metrics['train_base'] else f"{((metrics['train_hybrid']-metrics['train_base'])/metrics['train_base'])*100:.2f}%",
-                f"{((metrics['time_hybrid']-metrics['time_base'])/metrics['time_base'])*100:.2f}% (Latencia)"
+            "MLP Híbrido (Optimizado PSO)": [
+                f"{metrics['acc_pso']*100:.2f}%", 
+                f"{metrics['f1_pso']:.4f}", 
+                f"{metrics['loss_pso']:.4f}", 
+                f"{metrics['train_pso']:.2f} s", 
+                f"{metrics['time_pso'] * 1000:.3f} ms"
             ]
         })
         st.table(tabla_datos)

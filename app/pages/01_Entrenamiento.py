@@ -126,10 +126,10 @@ else:
             from src.model_hybrid import train_hybrid_model
             train_hybrid_model()
             
-            # FASE 5.5: Modelo XGBoost (Challenger)
-            status_box.info("Ejecutando Fase 5.5: Entrenamiento de Modelo XGBoost (Challenger)...")
-            from src.model_xgboost import train_xgboost_model
-            train_xgboost_model()
+            # FASE 5.5: Modelo Híbrido MLP + PSO
+            status_box.info("Ejecutando Fase 5.5: Optimización con Enjambre de Partículas (MLP + PSO)...")
+            from src.model_pso import train_pso_model
+            train_pso_model()
             
             # FASE 6: Evaluación y Comparación
             status_box.info("Ejecutando Fase 6: Evaluación y Comparación...")
