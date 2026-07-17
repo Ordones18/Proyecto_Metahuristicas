@@ -99,7 +99,10 @@ def run_interpretability_pipeline():
     # Explicar un caso de ejemplo (por ejemplo, el primer caso en explain_data)
     sample_idx = explain_data.index[0]
     sample_instance = X_test.loc[sample_idx]
-    true_label = y_test[X_test.index.get_loc(sample_idx)]
+    # get_indexer garantiza siempre un int posicional, a diferencia de get_loc()
+    # que puede devolver un slice o boolean array si hay índices duplicados
+    positional_idx = X_test.index.get_indexer([sample_idx])[0]
+    true_label = y_test[positional_idx]
     
     print(f"    - Explicando caso individual con LIME (Índice original: {sample_idx}, Clase Real: {true_label})...")
     

@@ -189,7 +189,7 @@ with col_chart:
         color_discrete_sequence=['#FF4B4B']
     )
     fig_line.update_layout(template="plotly_dark", height=450)
-    st.plotly_chart(fig_line, use_container_width=True)
+    st.plotly_chart(fig_line, width='stretch')
 
 # --- SEGUNDA FILA DE GRÁFICOS ---
 chart_col1, chart_col2 = st.columns(2)
@@ -204,7 +204,7 @@ with chart_col1:
             color_discrete_map={'MUJER': '#FF4081', 'HOMBRE': '#2196F3', 'SIN_DATO': '#9E9E9E'}
         )
         fig_bar.update_layout(template="plotly_dark", height=350, xaxis_title="Rango de Edad", yaxis_title="Casos")
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
 
 with chart_col2:
     st.markdown('<div class="section-title">Etnia de las Personas Desaparecidas</div>', unsafe_allow_html=True)
@@ -216,4 +216,4 @@ with chart_col2:
             color_discrete_sequence=px.colors.sequential.Plasma
         )
         fig_pie.update_layout(template="plotly_dark", height=350)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')

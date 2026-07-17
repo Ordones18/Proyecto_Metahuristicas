@@ -146,7 +146,7 @@ def generate_eda_plots():
 
     # --- 4. Distribución Geográfica (Provincia) ---
     print("  - Generando gráfico de distribución geográfica...")
-    prov_counts = df['provincia'].value_counts().reset_index(name='casos')
+    prov_counts = df['provincia'].value_counts().reset_index()
     prov_counts.columns = ['provincia', 'casos']
     
     plt.figure(figsize=(14, 8))
@@ -211,7 +211,8 @@ def generate_eda_plots():
     m = folium.Map(location=[-1.8312, -78.1834], zoom_start=7, tiles='CartoDB dark_matter')
     
     # Agregar heatmap de desapariciones
-    heat_data = [[row['lat_clean'], row['lon_clean']] for index, row in map_sample.iterrows()]
+    # Vectorizado: mucho más rápido que iterrows() con 8000 filas
+    heat_data = map_sample[['lat_clean', 'lon_clean']].values.tolist()
     HeatMap(heat_data, radius=12, blur=8, max_zoom=10).add_to(m)
     
     # Guardar mapa

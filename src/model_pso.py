@@ -19,6 +19,7 @@ if gpus:
     except RuntimeError as e:
         pass
 from tensorflow.keras import layers, models, optimizers, callbacks
+import tensorflow.keras.backend as K
 from sklearn.metrics import f1_score
 import joblib
 
@@ -49,11 +50,17 @@ def build_and_compile_mlp(input_shape, params):
     """
     Construye y compila el modelo MLP de acuerdo a los hiperparámetros decoded.
     """
+    from tensorflow.keras import regularizers
     model = models.Sequential()
     model.add(layers.Input(shape=(input_shape,)))
     
+    l2 = params.get('l2_reg', 0.0)
     for _ in range(params['n_layers']):
-        model.add(layers.Dense(params['neurons_per_layer'], activation=params['activation']))
+        model.add(layers.Dense(
+            params['neurons_per_layer'],
+            activation=params['activation'],
+            kernel_regularizer=regularizers.l2(l2) if l2 > 0.0 else None
+        ))
         if params['dropout'] > 0:
             model.add(layers.Dropout(params['dropout']))
             
@@ -64,8 +71,6 @@ def build_and_compile_mlp(input_shape, params):
         opt = optimizers.Adam(learning_rate=params['learning_rate'])
     elif params['optimizer'] == 'rmsprop':
         opt = optimizers.RMSprop(learning_rate=params['learning_rate'])
-    elif params['optimizer'] == 'sgd':
-        opt = optimizers.SGD(learning_rate=params['learning_rate'], momentum=0.9)
     else:
         opt = optimizers.Adam(learning_rate=params['learning_rate'])
         
@@ -96,7 +101,9 @@ def eval_position(position):
     global X_fitness_sample, y_fitness_sample
     if X_fitness_sample is None or y_fitness_sample is None:
         # Cargar los datos globales para evaluar fitness
-        X_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'X_train_selected.csv'))
+        # reset_index garantiza que los índices del DataFrame sean posicionales (0, 1, 2, ...)
+        # lo que evita el BUG de usar índices originales del DF sobre un numpy array
+        X_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'X_train_selected.csv')).reset_index(drop=True)
         y_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'y_train.csv')).values.ravel()
 
         # Tomar una muestra representativa fija para evaluar el fitness rápidamente
@@ -109,7 +116,9 @@ def eval_position(position):
             
         df_selected = pd.concat(samples, axis=0)
         X_fitness_sample = df_selected.values
-        y_fitness_sample = y_train_full[df_selected.index]
+        # Usar get_indexer para garantizar índices posicionales correctos sobre el numpy array
+        positional_idx = X_train_full.index.get_indexer(df_selected.index)
+        y_fitness_sample = y_train_full[positional_idx]
 
     params = decode_position(position)
     
@@ -122,8 +131,9 @@ def eval_position(position):
         stratify=y_fitness_sample
     )
     
-    # Épocas ultra reducidas (máximo 4) para la evaluación de la aptitud
-    epochs = min(params['epochs'], 4)
+    # Épocas reducidas para evaluación de fitness: 8 es un balance entre
+    # ranking confiable (más que 4) y velocidad de búsqueda
+    epochs = min(params['epochs'], 8)
     
     model = build_and_compile_mlp(X_fitness_sample.shape[1], params)
     
@@ -134,14 +144,22 @@ def eval_position(position):
             batch_size=params['batch_size'],
             verbose=0
         )
-        # Predecir clases
-        preds_prob = model.predict(X_va, verbose=0)
-        preds = (preds_prob >= 0.5).astype(int).ravel()
-        
-        # Calcular Macro F1-Score
-        score = f1_score(y_va, preds, average='macro')
+        # Threshold sweep: en lugar de usar 0.5 fijo, buscar el umbral que
+        # maximiza el Macro F1-Score sobre la muestra de validación de fitness.
+        # Crítico para datasets desbalanceados (93/7%).
+        probs_ravel = model.predict(X_va, verbose=0).ravel()
+        best_score = 0.0
+        for thresh in np.arange(0.25, 0.76, 0.05):
+            preds_t = (probs_ravel >= thresh).astype(int)
+            s = f1_score(y_va, preds_t, average='macro', zero_division=0)
+            if s > best_score:
+                best_score = s
+        score = best_score
     except Exception as e:
         score = 0.0
+    finally:
+        del model
+        K.clear_session()
         
     return score
 
@@ -163,9 +181,11 @@ class Particle:
             self.position[i] = max(bounds[i][0], min(self.position[i], bounds[i][1]))
 
 
-def run_pso_algorithm(w=0.5, c1=1.5, c2=1.5):
+def run_pso_algorithm(w_max=0.9, w_min=0.4, c1=1.5, c2=1.5):
     """
-    Ejecuta la optimización por enjambre de partículas (PSO).
+    Ejecuta la optimización por enjambre de partículas (PSO) con
+    Linear Inertia Weight Reduction (LIWR): w decrece linealmente de w_max
+    (exploración amplia) a w_min (explotación refinada) a lo largo de las iteraciones.
     """
     swarm_size = PSO_CONFIG['swarm_size']
     max_iter = PSO_CONFIG['max_iter']
@@ -182,7 +202,7 @@ def run_pso_algorithm(w=0.5, c1=1.5, c2=1.5):
     gbest_position = None
     gbest_fitness = -1.0
     
-    print(f"    - Inicializando PSO con Peso de Inercia: {w}, c1: {c1}, c2: {c2}")
+    print(f"    - Inicializando PSO: w_max={w_max}, w_min={w_min}, c1={c1}, c2={c2}")
     
     # Evaluar enjambre inicial
     for particle in swarm:
@@ -194,18 +214,21 @@ def run_pso_algorithm(w=0.5, c1=1.5, c2=1.5):
             
     history = []
     
-    # Iterar
+    # Iterar con inercia decreciente (LIWR)
     for it in range(1, max_iter + 1):
+        # Linear Inertia Weight Reduction: exploración amplia al inicio, explotación fina al final
+        w_current = w_max - (w_max - w_min) * (it / max_iter)
+        
         fitnesses = []
         for particle in swarm:
             # Generar números aleatorios para los coeficientes cognitivos y sociales
             r1 = np.array([random.random() for _ in range(len(bounds))])
             r2 = np.array([random.random() for _ in range(len(bounds))])
             
-            # Calcular nueva velocidad
+            # Calcular nueva velocidad con inercia decreciente
             cognitive = c1 * r1 * (particle.best_position - particle.position)
             social = c2 * r2 * (gbest_position - particle.position)
-            particle.velocity = w * particle.velocity + cognitive + social
+            particle.velocity = w_current * particle.velocity + cognitive + social
             
             # Actualizar posición y evaluar
             particle.update_position(bounds)
@@ -225,22 +248,24 @@ def run_pso_algorithm(w=0.5, c1=1.5, c2=1.5):
         # Registrar estadísticas de la iteración
         max_fit = np.max(fitnesses)
         avg_fit = np.mean(fitnesses)
-        std_fit = np.std(fitnesses)
-        min_fit = np.min(fitnesses)
         
         history.append(max_fit)
-        print(f"      Iter {it:02d}: Max Fitness = {max_fit:.5f}, Avg = {avg_fit:.5f}")
+        print(f"      Iter {it:02d} (w={w_current:.3f}): Max Fitness = {max_fit:.5f}, Avg = {avg_fit:.5f}")
         
     return history, gbest_position
 
 
 def compare_pso_parameters():
     """
-    Compara científicamente diferentes pesos de inercia w (0.5, 0.7)
-    y dibuja la curva de convergencia del fitness de PSO.
+    Compara científicamente diferentes configuraciones de PSO con
+    inercia decreciente (w_max, w_min) variando el valor de w_min.
     """
     print("  - Comparando diferentes configuraciones de PSO...")
-    w_values = [0.5, 0.7]
+    # Comparar dos estrategias de inercia decreciente: más agresiva vs. más suave
+    w_configs = [
+        (0.9, 0.4),   # LIWR estándar: decaimiento amplio
+        (0.9, 0.6),   # LIWR suave: menos explotación al final
+    ]
     results = {}
     best_overall_pos = None
     best_overall_fitness = -1.0
@@ -248,24 +273,24 @@ def compare_pso_parameters():
     if HAS_PLOTTING:
         plt.figure(figsize=(10, 6))
         
-    for w in w_values:
+    for w_max, w_min in w_configs:
+        key = f"{w_max}->{w_min}"
         start_time = time.time()
-        history, best_pos = run_pso_algorithm(w=w, c1=PSO_CONFIG['c1'], c2=PSO_CONFIG['c2'])
+        history, best_pos = run_pso_algorithm(w_max=w_max, w_min=w_min, c1=PSO_CONFIG['c1'], c2=PSO_CONFIG['c2'])
         elapsed = time.time() - start_time
         
         best_fitness = eval_position(best_pos)
-        results[w] = {
+        results[key] = {
             'history': history,
             'best_pos': best_pos.tolist(),
             'best_fitness': best_fitness,
             'time': elapsed
         }
         
-        print(f"    Inercia w={w}: Mejor Fitness = {best_fitness:.5f} (Tiempo: {elapsed:.2f}s)")
+        print(f"    Inercia w {key}: Mejor Fitness = {best_fitness:.5f} (Tiempo: {elapsed:.2f}s)")
         
-        # Graficar curva de convergencia si es posible
         if HAS_PLOTTING:
-            plt.plot(range(len(history)), history, marker='s', label=f'Inertia w: {w}')
+            plt.plot(range(len(history)), history, marker='s', label=f'w: {key}')
             
         if best_fitness > best_overall_fitness:
             best_overall_fitness = best_fitness
@@ -354,6 +379,18 @@ def train_pso_model():
     )
     train_time = time.time() - start_time
     print(f"  - Modelo híbrido PSO entrenado en {train_time:.2f} segundos.")
+    
+    # Buscar el threshold óptimo sobre el set de validación (paso fino de 0.01)
+    print("  - Buscando threshold óptimo de clasificación sobre validación...")
+    probs_val = model.predict(X_val, verbose=0).ravel()
+    best_thresh, best_f1_val = 0.5, 0.0
+    for t in np.arange(0.20, 0.81, 0.01):
+        p = (probs_val >= t).astype(int)
+        f = f1_score(y_val, p, average='macro', zero_division=0)
+        if f > best_f1_val:
+            best_f1_val, best_thresh = f, t
+    print(f"  - Threshold óptimo PSO: {best_thresh:.2f} (Val F1-macro: {best_f1_val:.5f})")
+    joblib.dump(best_thresh, os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib'))
     
     # Guardar modelo final, historial y estadísticas
     model_path = os.path.join(MODELS_DIR, 'mlp_pso.keras')

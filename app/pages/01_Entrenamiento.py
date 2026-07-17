@@ -67,7 +67,7 @@ else:
                 old_logs = f.read()
             st.code(old_logs, language="text")
         
-    if st.button("Iniciar Pipeline Completo de Entrenamiento", use_container_width=True):
+    if st.button("Iniciar Pipeline Completo de Entrenamiento", width='stretch'):
         # Limpiar inmediatamente el log anterior en la UI para evitar acumulación visual
         log_placeholder.empty()
         

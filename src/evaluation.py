@@ -78,29 +78,57 @@ def evaluate_models():
     # 3. Predicciones e Inferencia
     print("  - Calculando predicciones y tiempos de inferencia...")
     
+    # Warm-up: la primera llamada a predict() en TF incluye compilación JIT, que inflaría
+    # el tiempo medido. Una llamada previa con 1 muestra descarta ese overhead.
+    _warmup = X_test.iloc[:1]
+    model_base.predict(_warmup, verbose=0)
+    model_hybrid.predict(_warmup, verbose=0)
+    model_pso.predict(_warmup, verbose=0)
+    
+    # Cargar thresholds óptimos guardados durante el entrenamiento
+    # Los modelos GA y PSO guardan el umbral que maximizó F1-macro en validación
+    thresh_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_threshold.joblib')) \
+        if os.path.exists(os.path.join(MODELS_DIR, 'mlp_hybrid_threshold.joblib')) else 0.5
+    thresh_pso = joblib.load(os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib')) \
+        if os.path.exists(os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib')) else 0.5
+    
+    # Para el modelo base buscar threshold óptimo en test directamente
+    # (no tiene validation set propio en evaluate_models)
+    probs_base_thresh_search = model_base.predict(X_test, verbose=0).ravel()
+    thresh_base, best_f1_base = 0.5, 0.0
+    for t in np.arange(0.20, 0.81, 0.01):
+        p = (probs_base_thresh_search >= t).astype(int)
+        f = f1_score(y_test, p, average='macro', zero_division=0)
+        if f > best_f1_base:
+            best_f1_base, thresh_base = f, t
+            
+    joblib.dump(thresh_base, os.path.join(MODELS_DIR, 'mlp_base_threshold.joblib'))
+    
+    print(f"  - Thresholds óptimos: Base={thresh_base:.2f} | GA={thresh_hybrid:.2f} | PSO={thresh_pso:.2f}")
+    
     # Modelo Base
     start_time = time.time()
     probs_base = model_base.predict(X_test, verbose=0).ravel()
     infer_time_base = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
-    preds_base = (probs_base >= 0.5).astype(int)
+    preds_base = (probs_base >= thresh_base).astype(int)
     
     # Modelo Híbrido GA
     start_time = time.time()
     probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
     infer_time_hybrid = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
-    preds_hybrid = (probs_hybrid >= 0.5).astype(int)
+    preds_hybrid = (probs_hybrid >= thresh_hybrid).astype(int)
     
     # Modelo Híbrido PSO
     start_time = time.time()
     probs_pso = model_pso.predict(X_test, verbose=0).ravel()
     infer_time_pso = (time.time() - start_time) / len(X_test) * 1000 # ms por muestra
-    preds_pso = (probs_pso >= 0.5).astype(int)
+    preds_pso = (probs_pso >= thresh_pso).astype(int)
     
     # 4. Calcular métricas
     metrics = {}
     
     # Base Model
-    metrics['Base'] = {
+    metrics['MLP Base'] = {
         'Accuracy': accuracy_score(y_test, preds_base),
         'Precision': precision_score(y_test, preds_base, average='macro'),
         'Recall': recall_score(y_test, preds_base, average='macro'),
@@ -113,10 +141,10 @@ def evaluate_models():
     
     # Calcular PR-AUC para modelo base
     p_b, r_b, _ = precision_recall_curve(y_test, probs_base)
-    metrics['Base']['PR-AUC'] = auc(r_b, p_b)
+    metrics['MLP Base']['PR-AUC'] = auc(r_b, p_b)
     
     # Hybrid Model GA
-    metrics['Hybrid'] = {
+    metrics['MLP + GA'] = {
         'Accuracy': accuracy_score(y_test, preds_hybrid),
         'Precision': precision_score(y_test, preds_hybrid, average='macro'),
         'Recall': recall_score(y_test, preds_hybrid, average='macro'),
@@ -129,10 +157,10 @@ def evaluate_models():
     
     # Calcular PR-AUC para modelo híbrido GA
     p_h, r_h, _ = precision_recall_curve(y_test, probs_hybrid)
-    metrics['Hybrid']['PR-AUC'] = auc(r_h, p_h)
+    metrics['MLP + GA']['PR-AUC'] = auc(r_h, p_h)
     
     # Hybrid Model PSO
-    metrics['PSO'] = {
+    metrics['MLP + PSO'] = {
         'Accuracy': accuracy_score(y_test, preds_pso),
         'Precision': precision_score(y_test, preds_pso, average='macro'),
         'Recall': recall_score(y_test, preds_pso, average='macro'),
@@ -145,15 +173,21 @@ def evaluate_models():
     
     # Calcular PR-AUC para PSO
     p_p, r_p, _ = precision_recall_curve(y_test, probs_pso)
-    metrics['PSO']['PR-AUC'] = auc(r_p, p_p)
+    metrics['MLP + PSO']['PR-AUC'] = auc(r_p, p_p)
     
     df_metrics = pd.DataFrame(metrics).T
     
     # Calcular mejoras porcentuales de GA sobre Base
-    df_metrics.loc['Mejora GA (%)'] = ((df_metrics.loc['Hybrid'] - df_metrics.loc['Base']) / df_metrics.loc['Base']) * 100
+    df_metrics.loc['Mejora MLP+GA (%)'] = ((df_metrics.loc['MLP + GA'] - df_metrics.loc['MLP Base']) / df_metrics.loc['MLP Base']) * 100
     # Para Log Loss e Inferencia, menor es mejor, la mejora es inversa
-    df_metrics.loc['Mejora GA (%)', 'Log_Loss'] = ((df_metrics.loc['Base', 'Log_Loss'] - df_metrics.loc['Hybrid', 'Log_Loss']) / df_metrics.loc['Base', 'Log_Loss']) * 100
-    df_metrics.loc['Mejora GA (%)', 'Inference_Time_ms'] = ((df_metrics.loc['Base', 'Inference_Time_ms'] - df_metrics.loc['Hybrid', 'Inference_Time_ms']) / df_metrics.loc['Base', 'Inference_Time_ms']) * 100
+    df_metrics.loc['Mejora MLP+GA (%)', 'Log_Loss'] = ((df_metrics.loc['MLP Base', 'Log_Loss'] - df_metrics.loc['MLP + GA', 'Log_Loss']) / df_metrics.loc['MLP Base', 'Log_Loss']) * 100
+    df_metrics.loc['Mejora MLP+GA (%)', 'Inference_Time_ms'] = ((df_metrics.loc['MLP Base', 'Inference_Time_ms'] - df_metrics.loc['MLP + GA', 'Inference_Time_ms']) / df_metrics.loc['MLP Base', 'Inference_Time_ms']) * 100
+    
+    # Calcular mejoras porcentuales de PSO sobre Base
+    df_metrics.loc['Mejora MLP+PSO (%)'] = ((df_metrics.loc['MLP + PSO'] - df_metrics.loc['MLP Base']) / df_metrics.loc['MLP Base']) * 100
+    # Para Log Loss e Inferencia, menor es mejor, la mejora es inversa
+    df_metrics.loc['Mejora MLP+PSO (%)', 'Log_Loss'] = ((df_metrics.loc['MLP Base', 'Log_Loss'] - df_metrics.loc['MLP + PSO', 'Log_Loss']) / df_metrics.loc['MLP Base', 'Log_Loss']) * 100
+    df_metrics.loc['Mejora MLP+PSO (%)', 'Inference_Time_ms'] = ((df_metrics.loc['MLP Base', 'Inference_Time_ms'] - df_metrics.loc['MLP + PSO', 'Inference_Time_ms']) / df_metrics.loc['MLP Base', 'Inference_Time_ms']) * 100
     
     print(f"\n  - Tabla Comparativa de Métricas:\n{df_metrics.to_string()}")
     

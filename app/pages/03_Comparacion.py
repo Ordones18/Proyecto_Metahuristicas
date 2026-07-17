@@ -43,6 +43,14 @@ mcnemar_txt_path = os.path.join(REPORTS_DIR, 'statistical_comparison.txt')
 # Cargar dinámicamente los recursos pesados/modelos y cachearlos para máxima rapidez
 @st.cache_resource
 def load_comparison_data():
+    # Configurar GPU memory growth para el proceso de Streamlit (independiente de main.py)
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        try:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError:
+            pass
+
     project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     models_dir = os.path.join(project_dir, 'models')
     processed_dir = os.path.join(project_dir, 'data', 'processed')
@@ -86,9 +94,14 @@ def load_comparison_data():
             'success': True
         }
     except Exception as e:
-        return {'success': False, 'error': str(e)}
+        raise e
 
-comp_data = load_comparison_data()
+
+try:
+    comp_data = load_comparison_data()
+    comp_data['success'] = True
+except Exception as e:
+    comp_data = {'success': False, 'error': str(e)}
 
 if not os.path.exists(metrics_csv_path):
     st.error("No se encontraron los datos de evaluación. Debe ejecutar el pipeline completo de entrenamiento primero.")
@@ -96,8 +109,7 @@ else:
     df_metrics = pd.read_csv(metrics_csv_path)
     df_metrics.columns = ['Modelo'] + list(df_metrics.columns[1:])
     
-    st.subheader("Cuadro Comparativo de Métricas")
-    st.dataframe(df_metrics.style.format(precision=4), use_container_width=True)
+    st.dataframe(df_metrics.style.format(precision=4), width='stretch')
     
     st.info("**Nota sobre las métricas:** En *Accuracy, Precision, Recall, F1-Score, ROC-AUC y PR-AUC*, una mejora positiva indica un aumento del desempeño. Para *Log_Loss e Inference_Time_ms*, una mejora positiva indica una reducción del error/tiempo (menor es mejor).")
     
@@ -132,8 +144,8 @@ else:
             
             fig_roc = go.Figure()
             fig_roc.add_trace(go.Scatter(x=fpr_b, y=tpr_b, mode='lines', name=f'MLP Base (AUC = {auc_base:.4f})', line=dict(color='#1f77b4', width=3)))
-            fig_roc.add_trace(go.Scatter(x=fpr_h, y=tpr_h, mode='lines', name=f'MLP GA (AUC = {auc_hybrid:.4f})', line=dict(color='#d62728', width=3)))
-            fig_roc.add_trace(go.Scatter(x=fpr_p, y=tpr_p, mode='lines', name=f'MLP PSO (AUC = {auc_pso:.4f})', line=dict(color='#2ca02c', width=3)))
+            fig_roc.add_trace(go.Scatter(x=fpr_h, y=tpr_h, mode='lines', name=f'MLP + GA (AUC = {auc_hybrid:.4f})', line=dict(color='#d62728', width=3)))
+            fig_roc.add_trace(go.Scatter(x=fpr_p, y=tpr_p, mode='lines', name=f'MLP + PSO (AUC = {auc_pso:.4f})', line=dict(color='#2ca02c', width=3)))
             fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', line=dict(dash='dash', color='gray'), name='Límite Aleatorio'))
             fig_roc.update_layout(
                 title='Curva ROC Comparativa (Test Set)',
@@ -154,8 +166,8 @@ else:
             
             fig_pr = go.Figure()
             fig_pr.add_trace(go.Scatter(x=r_b, y=p_b, mode='lines', name=f'MLP Base (PR-AUC = {pr_auc_b:.4f})', line=dict(color='#1f77b4', width=3)))
-            fig_pr.add_trace(go.Scatter(x=r_h, y=p_h, mode='lines', name=f'MLP GA (PR-AUC = {pr_auc_h:.4f})', line=dict(color='#d62728', width=3)))
-            fig_pr.add_trace(go.Scatter(x=r_p, y=p_p, mode='lines', name=f'MLP PSO (PR-AUC = {pr_auc_p:.4f})', line=dict(color='#2ca02c', width=3)))
+            fig_pr.add_trace(go.Scatter(x=r_h, y=p_h, mode='lines', name=f'MLP + GA (PR-AUC = {pr_auc_h:.4f})', line=dict(color='#d62728', width=3)))
+            fig_pr.add_trace(go.Scatter(x=r_p, y=p_p, mode='lines', name=f'MLP + PSO (PR-AUC = {pr_auc_p:.4f})', line=dict(color='#2ca02c', width=3)))
             fig_pr.update_layout(
                 title='Curva Precision-Recall Comparativa (Test Set)',
                 xaxis_title='Recall (Sensibilidad)',
@@ -166,9 +178,9 @@ else:
             )
             
             with col1:
-                st.plotly_chart(fig_roc, use_container_width=True)
+                st.plotly_chart(fig_roc, width='stretch')
             with col2:
-                st.plotly_chart(fig_pr, use_container_width=True)
+                st.plotly_chart(fig_pr, width='stretch')
                 
         with tab2:
             col1, col2, col3 = st.columns(3)
@@ -196,7 +208,7 @@ else:
                 color_continuous_scale='Reds',
                 labels=dict(x="Predicción", y="Realidad", color="Casos")
             )
-            fig_cm_h.update_layout(title='Matriz de Confusión - MLP GA', template='plotly_dark', coloraxis_showscale=False)
+            fig_cm_h.update_layout(title='Matriz de Confusión - MLP + GA', template='plotly_dark', coloraxis_showscale=False)
             
             fig_cm_p = px.imshow(
                 cm_pso, 
@@ -206,14 +218,14 @@ else:
                 color_continuous_scale='Greens',
                 labels=dict(x="Predicción", y="Realidad", color="Casos")
             )
-            fig_cm_p.update_layout(title='Matriz de Confusión - MLP PSO', template='plotly_dark', coloraxis_showscale=False)
+            fig_cm_p.update_layout(title='Matriz de Confusión - MLP + PSO', template='plotly_dark', coloraxis_showscale=False)
             
             with col1:
-                st.plotly_chart(fig_cm_b, use_container_width=True)
+                st.plotly_chart(fig_cm_b, width='stretch')
             with col2:
-                st.plotly_chart(fig_cm_h, use_container_width=True)
+                st.plotly_chart(fig_cm_h, width='stretch')
             with col3:
-                st.plotly_chart(fig_cm_p, use_container_width=True)
+                st.plotly_chart(fig_cm_p, width='stretch')
                 
         with tab3:
             col1, col2 = st.columns(2)
@@ -222,12 +234,12 @@ else:
             hist_p = comp_data['hist_pso']
             
             fig_loss = go.Figure()
-            fig_loss.add_trace(go.Scatter(y=hist_b['loss'], mode='lines', name='Base Train Loss', line=dict(dash='dash', color='#1f77b4')))
-            fig_loss.add_trace(go.Scatter(y=hist_b['val_loss'], mode='lines', name='Base Val Loss', line=dict(color='#1f77b4', width=2)))
-            fig_loss.add_trace(go.Scatter(y=hist_h['loss'], mode='lines', name='GA Train Loss', line=dict(dash='dash', color='#d62728')))
-            fig_loss.add_trace(go.Scatter(y=hist_h['val_loss'], mode='lines', name='GA Val Loss', line=dict(color='#d62728', width=2)))
-            fig_loss.add_trace(go.Scatter(y=hist_p['loss'], mode='lines', name='PSO Train Loss', line=dict(dash='dash', color='#2ca02c')))
-            fig_loss.add_trace(go.Scatter(y=hist_p['val_loss'], mode='lines', name='PSO Val Loss', line=dict(color='#2ca02c', width=2)))
+            fig_loss.add_trace(go.Scatter(y=hist_b['loss'], mode='lines', name='MLP Base - Entr.', line=dict(dash='dash', color='#1f77b4')))
+            fig_loss.add_trace(go.Scatter(y=hist_b['val_loss'], mode='lines', name='MLP Base - Val.', line=dict(color='#1f77b4', width=2)))
+            fig_loss.add_trace(go.Scatter(y=hist_h['loss'], mode='lines', name='MLP + GA - Entr.', line=dict(dash='dash', color='#d62728')))
+            fig_loss.add_trace(go.Scatter(y=hist_h['val_loss'], mode='lines', name='MLP + GA - Val.', line=dict(color='#d62728', width=2)))
+            fig_loss.add_trace(go.Scatter(y=hist_p['loss'], mode='lines', name='MLP + PSO - Entr.', line=dict(dash='dash', color='#2ca02c')))
+            fig_loss.add_trace(go.Scatter(y=hist_p['val_loss'], mode='lines', name='MLP + PSO - Val.', line=dict(color='#2ca02c', width=2)))
             fig_loss.update_layout(
                 title='Historial de Pérdida (Loss)',
                 xaxis_title='Época',
@@ -237,12 +249,12 @@ else:
             )
             
             fig_acc = go.Figure()
-            fig_acc.add_trace(go.Scatter(y=hist_b['accuracy'], mode='lines', name='Base Train Acc', line=dict(dash='dash', color='#1f77b4')))
-            fig_acc.add_trace(go.Scatter(y=hist_b['val_accuracy'], mode='lines', name='Base Val Acc', line=dict(color='#1f77b4', width=2)))
-            fig_acc.add_trace(go.Scatter(y=hist_h['accuracy'], mode='lines', name='GA Train Acc', line=dict(dash='dash', color='#d62728')))
-            fig_acc.add_trace(go.Scatter(y=hist_h['val_accuracy'], mode='lines', name='GA Val Acc', line=dict(color='#d62728', width=2)))
-            fig_acc.add_trace(go.Scatter(y=hist_p['accuracy'], mode='lines', name='PSO Train Acc', line=dict(dash='dash', color='#2ca02c')))
-            fig_acc.add_trace(go.Scatter(y=hist_p['val_accuracy'], mode='lines', name='PSO Val Acc', line=dict(color='#2ca02c', width=2)))
+            fig_acc.add_trace(go.Scatter(y=hist_b['accuracy'], mode='lines', name='MLP Base - Entr.', line=dict(dash='dash', color='#1f77b4')))
+            fig_acc.add_trace(go.Scatter(y=hist_b['val_accuracy'], mode='lines', name='MLP Base - Val.', line=dict(color='#1f77b4', width=2)))
+            fig_acc.add_trace(go.Scatter(y=hist_h['accuracy'], mode='lines', name='MLP + GA - Entr.', line=dict(dash='dash', color='#d62728')))
+            fig_acc.add_trace(go.Scatter(y=hist_h['val_accuracy'], mode='lines', name='MLP + GA - Val.', line=dict(color='#d62728', width=2)))
+            fig_acc.add_trace(go.Scatter(y=hist_p['accuracy'], mode='lines', name='MLP + PSO - Entr.', line=dict(dash='dash', color='#2ca02c')))
+            fig_acc.add_trace(go.Scatter(y=hist_p['val_accuracy'], mode='lines', name='MLP + PSO - Val.', line=dict(color='#2ca02c', width=2)))
             fig_acc.update_layout(
                 title='Historial de Exactitud (Accuracy)',
                 xaxis_title='Época',
@@ -252,9 +264,9 @@ else:
             )
             
             with col1:
-                st.plotly_chart(fig_loss, use_container_width=True)
+                st.plotly_chart(fig_loss, width='stretch')
             with col2:
-                st.plotly_chart(fig_acc, use_container_width=True)
+                st.plotly_chart(fig_acc, width='stretch')
                 
         with tab4:
             ga_res = comp_data['ga_results']
@@ -271,4 +283,4 @@ else:
                 template='plotly_dark',
                 hovermode='x unified'
             )
-            st.plotly_chart(fig_meta, use_container_width=True)
+            st.plotly_chart(fig_meta, width='stretch')

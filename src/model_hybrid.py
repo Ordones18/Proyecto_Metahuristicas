@@ -19,6 +19,7 @@ if gpus:
     except RuntimeError as e:
         pass
 from tensorflow.keras import layers, models, optimizers, callbacks
+import tensorflow.keras.backend as K
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import f1_score
 from deap import base, creator, tools, algorithms
@@ -57,11 +58,17 @@ def build_and_compile_mlp(input_shape, params):
     """
     Construye y compila el modelo MLP de acuerdo a los hiperparámetros decoded.
     """
+    from tensorflow.keras import regularizers
     model = models.Sequential()
     model.add(layers.Input(shape=(input_shape,)))
     
+    l2 = params.get('l2_reg', 0.0)
     for _ in range(params['n_layers']):
-        model.add(layers.Dense(params['neurons_per_layer'], activation=params['activation']))
+        model.add(layers.Dense(
+            params['neurons_per_layer'],
+            activation=params['activation'],
+            kernel_regularizer=regularizers.l2(l2) if l2 > 0.0 else None
+        ))
         if params['dropout'] > 0:
             model.add(layers.Dropout(params['dropout']))
             
@@ -72,8 +79,6 @@ def build_and_compile_mlp(input_shape, params):
         opt = optimizers.Adam(learning_rate=params['learning_rate'])
     elif params['optimizer'] == 'rmsprop':
         opt = optimizers.RMSprop(learning_rate=params['learning_rate'])
-    elif params['optimizer'] == 'sgd':
-        opt = optimizers.SGD(learning_rate=params['learning_rate'], momentum=0.9)
     else:
         opt = optimizers.Adam(learning_rate=params['learning_rate'])
         
@@ -104,12 +109,13 @@ def eval_individual(individual):
     global X_fitness_sample, y_fitness_sample
     if X_fitness_sample is None or y_fitness_sample is None:
         # Cargar los datos globales para evaluar fitness
-        X_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'X_train_selected.csv'))
-
+        # reset_index garantiza que los índices del DataFrame sean posicionales (0, 1, 2, ...)
+        # lo que evita el BUG de usar índices originales del DF sobre un numpy array
+        X_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'X_train_selected.csv')).reset_index(drop=True)
         y_train_full = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'y_train.csv')).values.ravel()
 
         # Tomar una muestra representativa fija para evaluar el fitness rápidamente
-        # 1500 registros estratificados para evaluación de fitness en validación cruzada (pandas 2.x compatible)
+        # 1000 registros por clase para evaluación de fitness (pandas 2.x compatible)
         samples = []
         for val in np.unique(y_train_full):
             mask = (y_train_full == val)
@@ -119,7 +125,9 @@ def eval_individual(individual):
             
         df_selected = pd.concat(samples, axis=0)
         X_fitness_sample = df_selected.values
-        y_fitness_sample = y_train_full[df_selected.index]
+        # Usar get_indexer para garantizar índices posicionales correctos sobre el numpy array
+        positional_idx = X_train_full.index.get_indexer(df_selected.index)
+        y_fitness_sample = y_train_full[positional_idx]
 
     params = decode_chromosome(individual)
     
@@ -132,8 +140,9 @@ def eval_individual(individual):
         stratify=y_fitness_sample
     )
     
-    # Épocas ultra reducidas (máximo 4) para la evaluación de la aptitud en el GA
-    epochs = min(params['epochs'], 4)
+    # Épocas reducidas para evaluación de fitness: 8 es un balance entre
+    # ranking confiable (más que 4) y velocidad de búsqueda
+    epochs = min(params['epochs'], 8)
     
     model = build_and_compile_mlp(X_fitness_sample.shape[1], params)
     
@@ -144,14 +153,22 @@ def eval_individual(individual):
             batch_size=params['batch_size'],
             verbose=0
         )
-        # Predecir clases
-        preds_prob = model.predict(X_va, verbose=0)
-        preds = (preds_prob >= 0.5).astype(int).ravel()
-        
-        # Calcular Macro F1-Score
-        score = f1_score(y_va, preds, average='macro')
+        # Threshold sweep: en lugar de usar 0.5 fijo, buscar el umbral que
+        # maximiza el Macro F1-Score sobre la muestra de validación de fitness.
+        # Crítico para datasets desbalanceados (93/7%).
+        probs_ravel = model.predict(X_va, verbose=0).ravel()
+        best_score = 0.0
+        for thresh in np.arange(0.25, 0.76, 0.05):
+            preds_t = (probs_ravel >= thresh).astype(int)
+            s = f1_score(y_va, preds_t, average='macro', zero_division=0)
+            if s > best_score:
+                best_score = s
+        score = best_score
     except Exception as e:
         score = 0.0
+    finally:
+        del model
+        K.clear_session()
         
     return (score,)
 
@@ -372,6 +389,19 @@ def train_hybrid_model():
     )
     train_time = time.time() - start_time
     print(f"  - Modelo híbrido optimizado entrenado en {train_time:.2f} segundos.")
+    
+    # Buscar el threshold óptimo sobre el set de validación (paso fino de 0.01)
+    # Esto maximiza el Macro F1-Score real del modelo con datos desbalanceados (93/7%)
+    print("  - Buscando threshold óptimo de clasificación sobre validación...")
+    probs_val = model.predict(X_val, verbose=0).ravel()
+    best_thresh, best_f1_val = 0.5, 0.0
+    for t in np.arange(0.20, 0.81, 0.01):
+        p = (probs_val >= t).astype(int)
+        f = f1_score(y_val, p, average='macro', zero_division=0)
+        if f > best_f1_val:
+            best_f1_val, best_thresh = f, t
+    print(f"  - Threshold óptimo GA: {best_thresh:.2f} (Val F1-macro: {best_f1_val:.5f})")
+    joblib.dump(best_thresh, os.path.join(MODELS_DIR, 'mlp_hybrid_threshold.joblib'))
     
     # Guardar modelo final, historial y estadísticas
     model_path = os.path.join(MODELS_DIR, 'mlp_hybrid.keras')

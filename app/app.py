@@ -44,29 +44,29 @@ def load_metrics():
     if os.path.exists(csv_path):
         try:
             df = pd.read_csv(csv_path, index_col=0)
-            if "Base" in df.index and "Hybrid" in df.index:
-                acc_b = df.loc["Base", "Accuracy"]
-                acc_h = df.loc["Hybrid", "Accuracy"]
-                f1_b = df.loc["Base", "F1-Score"]
-                f1_h = df.loc["Hybrid", "F1-Score"]
-                loss_b = df.loc["Base", "Log_Loss"]
-                loss_h = df.loc["Hybrid", "Log_Loss"]
+            if "MLP Base" in df.index and "MLP + GA" in df.index:
+                acc_b = df.loc["MLP Base", "Accuracy"]
+                acc_h = df.loc["MLP + GA", "Accuracy"]
+                f1_b = df.loc["MLP Base", "F1-Score"]
+                f1_h = df.loc["MLP + GA", "F1-Score"]
+                loss_b = df.loc["MLP Base", "Log_Loss"]
+                loss_h = df.loc["MLP + GA", "Log_Loss"]
                 
-                time_b = df.loc["Base", "Inference_Time_ms"] if "Inference_Time_ms" in df.columns else metrics["time_base"]
-                time_h = df.loc["Hybrid", "Inference_Time_ms"] if "Inference_Time_ms" in df.columns else metrics["time_hybrid"]
-                train_b = df.loc["Base", "Train_Time"] if "Train_Time" in df.columns else metrics["train_base"]
-                train_h = df.loc["Hybrid", "Train_Time"] if "Train_Time" in df.columns else metrics["train_hybrid"]
+                time_b = df.loc["MLP Base", "Inference_Time_ms"] if "Inference_Time_ms" in df.columns else metrics["time_base"]
+                time_h = df.loc["MLP + GA", "Inference_Time_ms"] if "Inference_Time_ms" in df.columns else metrics["time_hybrid"]
+                train_b = df.loc["MLP Base", "Train_Time"] if "Train_Time" in df.columns else metrics["train_base"]
+                train_h = df.loc["MLP + GA", "Train_Time"] if "Train_Time" in df.columns else metrics["train_hybrid"]
                 
-                acc_p = df.loc["PSO", "Accuracy"] if "PSO" in df.index else metrics["acc_pso"]
-                f1_p = df.loc["PSO", "F1-Score"] if "PSO" in df.index else metrics["f1_pso"]
-                loss_p = df.loc["PSO", "Log_Loss"] if "PSO" in df.index else metrics["loss_pso"]
-                time_p = df.loc["PSO", "Inference_Time_ms"] if "PSO" in df.index and "Inference_Time_ms" in df.columns else metrics["time_pso"]
-                train_p = df.loc["PSO", "Train_Time"] if "PSO" in df.index and "Train_Time" in df.columns else metrics["train_pso"]
+                acc_p = df.loc["MLP + PSO", "Accuracy"] if "MLP + PSO" in df.index else metrics["acc_pso"]
+                f1_p = df.loc["MLP + PSO", "F1-Score"] if "MLP + PSO" in df.index else metrics["f1_pso"]
+                loss_p = df.loc["MLP + PSO", "Log_Loss"] if "MLP + PSO" in df.index else metrics["loss_pso"]
+                time_p = df.loc["MLP + PSO", "Inference_Time_ms"] if "MLP + PSO" in df.index and "Inference_Time_ms" in df.columns else metrics["time_pso"]
+                train_p = df.loc["MLP + PSO", "Train_Time"] if "MLP + PSO" in df.index and "Train_Time" in df.columns else metrics["train_pso"]
                 
-                if "Mejora GA (%)" in df.index:
-                    f1_imp = df.loc["Mejora GA (%)", "F1-Score"]
-                    acc_imp = df.loc["Mejora GA (%)", "Accuracy"]
-                    loss_red = df.loc["Mejora GA (%)", "Log_Loss"]
+                if "Mejora MLP+GA (%)" in df.index:
+                    f1_imp = df.loc["Mejora MLP+GA (%)", "F1-Score"]
+                    acc_imp = df.loc["Mejora MLP+GA (%)", "Accuracy"]
+                    loss_red = df.loc["Mejora MLP+GA (%)", "Log_Loss"]
                 else:
                     f1_imp = ((f1_h - f1_b) / f1_b) * 100
                     acc_imp = ((acc_h - acc_b) / acc_b) * 100
@@ -93,8 +93,8 @@ def load_metrics():
                     "loss_reduction": loss_red,
                     "loaded_from_csv": True
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            st.toast(f"⚠️ Usando métricas por defecto (no se pudo leer CSV: {e})", icon="⚠️")
     return metrics
 
 
@@ -468,7 +468,7 @@ def show_inicio():
             fig_metrics.add_trace(go.Bar(
                 x=['Accuracy (Precisión)', 'F1-Score (Macro)'],
                 y=[metrics['acc_base'] * 100, metrics['f1_base'] * 100],
-                name='MLP Base (Estático)',
+                name='MLP Base',
                 marker_color='#510A32',
                 text=[f"{metrics['acc_base']*100:.2f}%", f"{metrics['f1_base']*100:.2f}%"],
                 textposition='auto'
@@ -476,7 +476,7 @@ def show_inicio():
             fig_metrics.add_trace(go.Bar(
                 x=['Accuracy (Precisión)', 'F1-Score (Macro)'],
                 y=[metrics['acc_hybrid'] * 100, metrics['f1_hybrid'] * 100],
-                name='MLP Híbrido (GA)',
+                name='MLP + GA',
                 marker_color='#FF4B4B',
                 text=[f"{metrics['acc_hybrid']*100:.2f}%", f"{metrics['f1_hybrid']*100:.2f}%"],
                 textposition='auto'
@@ -484,7 +484,7 @@ def show_inicio():
             fig_metrics.add_trace(go.Bar(
                 x=['Accuracy (Precisión)', 'F1-Score (Macro)'],
                 y=[metrics['acc_pso'] * 100, metrics['f1_pso'] * 100],
-                name='MLP Híbrido (PSO)',
+                name='MLP + PSO',
                 marker_color='#2ca02c',
                 text=[f"{metrics['acc_pso']*100:.2f}%", f"{metrics['f1_pso']*100:.2f}%"],
                 textposition='auto'
@@ -500,7 +500,7 @@ def show_inicio():
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=350
             )
-            st.plotly_chart(fig_metrics, use_container_width=True)
+            st.plotly_chart(fig_metrics, width='stretch')
 
         with col_r2:
             # Gráfico de tiempos
@@ -508,7 +508,7 @@ def show_inicio():
             fig_time.add_trace(go.Bar(
                 x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
                 y=[metrics['train_base'], metrics['time_base'] * 1000],
-                name='MLP Base (Estático)',
+                name='MLP Base',
                 marker_color='#510A32',
                 text=[f"{metrics['train_base']:.1f} s", f"{metrics['time_base']*1000:.2f} ms"],
                 textposition='auto'
@@ -516,7 +516,7 @@ def show_inicio():
             fig_time.add_trace(go.Bar(
                 x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
                 y=[metrics['train_hybrid'], metrics['time_hybrid'] * 1000],
-                name='MLP Híbrido (GA)',
+                name='MLP + GA',
                 marker_color='#8A2387',
                 text=[f"{metrics['train_hybrid']:.1f} s", f"{metrics['time_hybrid']*1000:.2f} ms"],
                 textposition='auto'
@@ -524,7 +524,7 @@ def show_inicio():
             fig_time.add_trace(go.Bar(
                 x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
                 y=[metrics['train_pso'], metrics['time_pso'] * 1000],
-                name='MLP Híbrido (PSO)',
+                name='MLP + PSO',
                 marker_color='#2ca02c',
                 text=[f"{metrics['train_pso']:.1f} s", f"{metrics['time_pso']*1000:.2f} ms"],
                 textposition='auto'
@@ -539,7 +539,7 @@ def show_inicio():
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=350
             )
-            st.plotly_chart(fig_time, use_container_width=True)
+            st.plotly_chart(fig_time, width='stretch')
 
         # Cargar y mostrar datos del test de McNemar
         mcnemar = load_statistical_comparison()

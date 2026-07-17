@@ -105,9 +105,9 @@ def generate_pdf_report(metrics_df, mcnemar_text):
         metrics_indexed = metrics_df
         
     for col in metrics_indexed.columns:
-        val_base = metrics_indexed.loc['Base'][col] if 'Base' in metrics_indexed.index else 0.0
-        val_ga = metrics_indexed.loc['Hybrid'][col] if 'Hybrid' in metrics_indexed.index else 0.0
-        val_pso = metrics_indexed.loc['PSO'][col] if 'PSO' in metrics_indexed.index else 0.0
+        val_base = metrics_indexed.loc['MLP Base'][col] if 'MLP Base' in metrics_indexed.index else 0.0
+        val_ga = metrics_indexed.loc['MLP + GA'][col] if 'MLP + GA' in metrics_indexed.index else 0.0
+        val_pso = metrics_indexed.loc['MLP + PSO'][col] if 'MLP + PSO' in metrics_indexed.index else 0.0
         
         pdf.cell(35, 8, str(col), border=1)
         pdf.cell(50, 8, f"{val_base:.4f}" if isinstance(val_base, (int, float)) else str(val_base), border=1)

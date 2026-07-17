@@ -52,13 +52,15 @@ Para evitar el sesgo de seleccionar variables con un único algoritmo, el módul
 - **Información Mutua (Mutual Information)**
 
 ### 3. Sintonización Metaheurística (Algoritmo Genético y Enjambre de Partículas)
-La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas (MLP) es ineficiente y no garantiza óptimos globales en espacios de alta dimensionalidad. El proyecto implementa dos optimizadores bio-inspirados en paralelo sobre el mismo espacio de búsqueda:
+La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas (MLP) es ineficiente y no garantiza óptimos globales en espacios de alta dimensionalidad. El proyecto implementa dos optimizadores bio-inspirados en paralelo sobre el mismo espacio de búsqueda combinatorio:
+- **Espacio de Búsqueda Expandido**: Incluye `learning_rate`, `n_layers`, `neurons_per_layer`, `dropout`, `batch_size`, `activation`, `optimizer`, `epochs` y la nueva variable de **Regularización L2 (weight decay)** (`l2_reg: [0.0, 1e-4, 1e-3, 1e-2]`).
 - **Algoritmo Genético (GA) en DEAP**: Sintoniza el cromosoma del MLP utilizando selección por torneo ($k=3$), cruce uniforme ($p_x=0.7$), mutación uniforme indexada ($p_m=0.2$) y elitismo.
-- **Optimización por Enjambre de Partículas (PSO) Manual**: Mapea posiciones continuas del enjambre a los índices discretos del espacio de hiperparámetros, actualizando velocidades según componentes inerciales, cognitivos e influencia social global.
-- **Función Fitness**: Maximización del **Macro F1-Score** promedio obtenido mediante validación cruzada estratificada rápida sobre el conjunto de entrenamiento.
+- **Optimización por Enjambre de Partículas (PSO) Manual**: Mapea posiciones continuas a los índices discretos de la grilla de hiperparámetros. Implementa el esquema **Linear Inertia Weight Reduction (LIWR)**, donde el peso de inercia $w$ decae linealmente de $0.9$ a $0.4$ durante las iteraciones para transicionar suavemente de exploración global a explotación local fina.
+- **Función Fitness Adaptativa (Threshold Sweep)**: Durante la evaluación de cada candidato (entrenado de forma compacta durante 8 épocas), se barre un rango de umbrales de decisión ($0.25$ a $0.75$) sobre la muestra de validación interna. El **F1-Score Macro máximo** resultante es asignado como su puntuación real de aptitud, neutralizando el sesgo de la clase mayoritaria.
 
 ### 4. Validación Científica y Explicabilidad (XAI)
 - **Significancia Estadística (Test de McNemar)**: Determina si las diferencias predictivas entre el MLP Base, el MLP Híbrido (GA) y el MLP Híbrido (PSO) son estadísticamente significativas analizando las tablas de contingencia de aciertos y desaciertos conjuntos en el set de test independiente.
+- **Umbral de Decisión Optimizado**: Tras el entrenamiento final completo, se busca el umbral óptimo de decisión (paso $0.01$ de $0.20$ a $0.80$) sobre la validación completa. Este threshold se guarda y aplica de forma automática en la inferencia interactiva.
 - **Interpretabilidad Local (LIME)**: Rompe el paradigma de la "caja negra" de los modelos supervisados, generando regresiones lineales locales que explican visualmente al usuario qué variables individuales (ej. edad, sexo, provincia) aumentaron o disminuyeron la probabilidad de localización en cada predicción en tiempo real.
 
 ---
@@ -71,18 +73,18 @@ Por rigurosidad científica y metodológica, el proyecto utiliza de forma exclus
 
 ## 📊 Resultados de los Modelos (Conjunto de Test)
 
-| Métrica | MLP Base (Estático) | MLP Híbrido (GA) | MLP Híbrido (PSO) | Mejora (PSO vs Base) |
-| :--- | :---: | :---: | :---: | :---: |
-| **Accuracy (Exactitud)** | 74.56% | 78.35% | **79.01%** | **+4.45%** 🟢 |
-| **F1-Score (Macro)** | 0.5771 | 0.6007 | **0.6043** | **+2.72%** 🟢 |
-| **Log Loss (Pérdida)** | 0.4797 | 0.4438 | **0.3737** | **-22.10% (Reducción)** 🟢 |
-| **PR-AUC (Área PR)** | **0.9879** | **0.9879** | 0.9870 | **-0.09%** 🟡 |
-| **Tiempo de Entrenamiento** | 19.49 s | **12.87 s** | 100.26 s | *Búsqueda global extendida* ⏳ |
-| **Latencia de Inferencia** | **0.0254 ms** | 0.0261 ms | 0.0277 ms | *Diferencia marginal* ⚡ |
+| Métrica | MLP Base | MLP + GA | MLP + PSO | Mejora MLP+GA (%) | Mejora MLP+PSO (%) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Accuracy (Exactitud)** | 74.56% | 78.35% | **79.01%** | **+5.08%** 🟢 | **+5.97%** 🟢 |
+| **F1-Score (Macro)** | 0.5771 | 0.6007 | **0.6043** | **+4.09%** 🟢 | **+4.71%** 🟢 |
+| **Log Loss (Pérdida)** | 0.4797 | 0.4438 | **0.3737** | **-7.48%** 🟢 | **-22.10%** 🟢 |
+| **PR-AUC (Área PR)** | **0.9879** | **0.9879** | 0.9870 | **0.00%** 🟡 | **-0.09%** 🟡 |
+| **Tiempo de Entrenamiento** | 19.49 s | **12.87 s** | 100.26 s | **-33.97%** 🟢 | *Búsqueda global* ⏳ |
+| **Latencia de Inferencia** | **0.0254 ms** | 0.0261 ms | 0.0277 ms | *Diferencia marginal* ⚡ | *Diferencia marginal* ⚡ |
 
 - **Resultado de los Tests de McNemar**: 
-  1. **MLP Base vs. MLP Híbrido (GA)**: Chi-cuadrado de **345.94**, p-valor de **0.00** ($p < 0.05$). Indica que la mejora del GA es estadísticamente altamente significativa.
-  2. **MLP Híbrido (GA) vs. MLP Híbrido (PSO)**: Chi-cuadrado de **22.97**, p-valor de **1.65e-06** ($p < 0.05$). Indica diferencias predictivas estadísticamente significativas entre ambos métodos de optimización, consolidando a PSO como el modelo óptimo con mejor Accuracy, F1 y menor Log Loss.
+  1. **MLP Base vs. MLP + GA**: Chi-cuadrado de **345.94**, p-valor de **0.00** ($p < 0.05$). Indica que la mejora de la metaheurística GA es estadísticamente altamente significativa.
+  2. **MLP + GA vs. MLP + PSO**: Chi-cuadrado de **22.97**, p-valor de **1.65e-06** ($p < 0.05$). Indica diferencias predictivas estadísticamente significativas entre ambos métodos de optimización, consolidando a PSO como el modelo óptimo con mejor Accuracy, F1 y menor Log Loss.
 
 ---
 

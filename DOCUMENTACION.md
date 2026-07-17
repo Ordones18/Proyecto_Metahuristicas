@@ -33,7 +33,7 @@ Para contrastar y validar la efectividad del Algoritmo Genético, el proyecto in
 
 ### B. Rigor de la Comparativa (GA vs. PSO)
 La comparación directa de **MLP+GA** frente a **MLP+PSO** representa un marco científico riguroso por dos motivos:
-* **Entorno Experimental Idéntico:** Ambos algoritmos evalúan exactamente los mismos hiperparámetros discretos (capas, neuronas, activación, dropout, tasa de aprendizaje, batch, optimizador y épocas) usando la misma función de fitness basada en Macro F1-Score bajo validación cruzada rápida, evitando sesgos de implementación.
+* **Entorno Experimental Idéntico:** Ambos algoritmos evalúan exactamente los mismos hiperparámetros discretos (capas, neuronas, activación, dropout, regularización L2, tasa de aprendizaje, batch, optimizador y épocas) usando la misma función de fitness basada en el F1-Score Macro óptimo obtenido mediante validación cruzada rápida, evitando sesgos de implementación.
 * **Contraste de Metaheurísticas de Población:** Permite contrastar la exploración/explotación de un algoritmo evolutivo (GA) basado en la supervivencia del más apto frente a la dinámica cooperativa y de seguimiento social de un optimizador de enjambres (PSO).
 
 ---
@@ -52,3 +52,24 @@ El dataset original presenta un **desbalanceo severo de clases** (~93.18% de cas
 ### C. Adopción de Class Weights (Pesos de Clase)
 * **¿Cómo funciona?** No modifica los datos. En su lugar, modifica la función de costo (Binary Cross-entropy) durante el entrenamiento de la red y el ajuste de XGBoost, penalizando mucho más fuertemente los errores cometidos sobre la clase minoritaria (No Encontrado).
 * **Valor Metodológico:** Permite entrenar los modelos sobre el 100% de la historia real (los 75,517 registros), sin destruir información valiosa ni fabricar datos artificiales/sintéticos. Es la técnica más limpia, transparente y matemáticamente rigurosa para el contexto de esta investigación.
+
+---
+
+## 4. Refinamientos Metodológicos de Optimización y Umbrales Dinámicos (V2.0)
+Para elevar la rigurosidad científica exigida en publicaciones indexadas y maximizar el F1-Score Macro real, se implementaron los siguientes mecanismos de optimización y búsqueda metaheurística:
+
+### A. Regularización L2 (Weight Decay) e Hiperparametrización Expandida
+Se incorporó la **Regularización L2 (penalización L2 en los pesos)** en el espacio de búsqueda metaheurística (`l2_reg: [0.0, 1e-4, 1e-3, 1e-2]`). Esto permite a los optimizadores GA y PSO encontrar un equilibrio ideal de regularización combinando Dropout y L2 de forma simultánea, minimizando el sobreajuste latente en la MLP sobre datos altamente desbalanceados. Asimismo, se descartó el optimizador SGD por su lenta convergencia y se incrementó el límite de épocas del fitness a $8$ para asegurar rankings de población mucho más confiables y libres de ruido.
+
+### B. Umbral Dinámico de Decisión (Threshold Sweep) en la Evaluación del Fitness
+Utilizar un umbral estático de decisión de $0.5$ en la predicción final es metodológicamente incorrecto en escenarios de desbalanceo de clases extremo. Para resolver este sesgo:
+1. Durante la evaluación de cada individuo o partícula, el cálculo de fitness ejecuta un **barrido de umbrales** de $0.25$ a $0.75$ (paso $0.05$). Se selecciona el **F1-Score Macro máximo** alcanzable por esa arquitectura como su puntuación real de aptitud.
+2. Tras finalizar el entrenamiento con los hiperparámetros óptimos, se efectúa una búsqueda fina (paso $0.01$) del threshold sobre el set de validación completo y se almacena en disco (`mlp_*_threshold.joblib`). Esto garantiza que, tanto en la validación estadística final como en la interfaz de Streamlit, se utilice la máxima capacidad de discriminación adaptativa de la red neuronal.
+
+### C. Dinámica de Inercia Decreciente (LIWR) en el Enjambre de Partículas (PSO)
+La versión previa de PSO utilizaba un factor de inercia $w$ constante, lo que impedía al enjambre converger de manera eficiente. Se implementó un esquema de **Linear Inertia Weight Reduction (LIWR)**:
+$$w_t = w_{max} - (w_{max} - w_{min}) \cdot \frac{t}{T}$$
+donde $w_{max} = 0.9$ (máxima exploración del espacio en las primeras iteraciones) y $w_{min} = 0.4$ (máxima explotación y refinamiento local en las iteraciones finales). Esto estabiliza drásticamente la trayectoria y la convergencia global de las partículas hacia los hiperparámetros óptimos de la red.
+
+### D. Optimización de Recursos de GPU y Gestión de Contextos en TensorFlow
+Debido a la naturaleza iterativa de las metaheurísticas (que evalúan docenas de configuraciones de redes neuronales consecutivamente), se integró `K.clear_session()` y el borrado explícito de variables en cada ciclo de fitness. Esto, junto a la configuración del crecimiento dinámico de memoria (`memory_growth`) en el proceso principal y los hilos de la aplicación Streamlit, evita la acumulación y fuga de grafos computacionales en la VRAM de la GPU, garantizando ejecuciones estables y libres de errores `Out Of Memory` (OOM).

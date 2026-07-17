@@ -38,11 +38,12 @@ GA_PARAM_SPACE = {
     'learning_rate': [1e-4, 5e-4, 1e-3, 5e-3, 1e-2],
     'n_layers': [1, 2, 3, 4],
     'neurons_per_layer': [32, 64, 128, 256],
-    'dropout': [0.1, 0.2, 0.3, 0.4, 0.5],
+    'dropout': [0.0, 0.1, 0.2, 0.3, 0.4],
+    'l2_reg': [0.0, 1e-4, 1e-3, 1e-2],         # Regularización L2 (weight decay)
     'batch_size': [32, 64, 128, 256],
     'activation': ['relu', 'elu', 'selu'],
-    'optimizer': ['adam', 'rmsprop', 'sgd'],
-    'epochs': [20, 35, 50, 75]
+    'optimizer': ['adam', 'rmsprop'],            # SGD eliminado: converge mucho más lento sin beneficio comprobado
+    'epochs': [30, 50, 75, 100]                 # Aumentado para el entrenamiento final
 }
 
 # Configuración del GA
@@ -59,8 +60,9 @@ GA_CONFIG = {
 # Configuración del PSO
 PSO_CONFIG = {
     'swarm_size': 16,      # Tamaño de la población de partículas
-    'max_iter': 8,         # Número máximo de iteraciones
-    'w': 0.5,              # Peso de inercia
+    'max_iter': 10,        # Aumentado de 8 para mayor convergencia
+    'w_max': 0.9,          # Inercia inicial (exploración amplia)
+    'w_min': 0.4,          # Inercia final (explotación refinada)
     'c1': 1.5,             # Coeficiente de aceleración cognitivo
     'c2': 1.5              # Coeficiente de aceleración social
 }

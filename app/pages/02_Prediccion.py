@@ -47,6 +47,14 @@ st.write("Ingrese los datos de la desaparición para estimar la probabilidad de 
 # Función para cargar recursos del modelo con caché
 @st.cache_resource
 def load_prediction_resources():
+    # Configurar GPU memory growth para el proceso de Streamlit (independiente de main.py)
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        try:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError:
+            pass
+
     try:
         model_base = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_base.keras'))
         model_hybrid = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
@@ -69,8 +77,22 @@ def load_prediction_resources():
         )
         
         import json
-        with open(os.path.join(MODELS_DIR, 'parroquia_coords.json'), 'r', encoding='utf-8') as f:
+        json_path = os.path.join(MODELS_DIR, 'parroquia_coords.json')
+        if not os.path.exists(json_path):
+            raise FileNotFoundError(
+                f"No se encontró '{json_path}'. "
+                "Este archivo debe generarse o copiarse al directorio 'models/' antes de usar la predicción."
+            )
+        with open(json_path, 'r', encoding='utf-8') as f:
             parroquia_coords = json.load(f)
+            
+        # Cargar thresholds óptimos guardados para la inferencia adaptativa
+        thresh_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_threshold.joblib')) \
+            if os.path.exists(os.path.join(MODELS_DIR, 'mlp_base_threshold.joblib')) else 0.5
+        thresh_hybrid = joblib.load(os.path.join(MODELS_DIR, 'mlp_hybrid_threshold.joblib')) \
+            if os.path.exists(os.path.join(MODELS_DIR, 'mlp_hybrid_threshold.joblib')) else 0.5
+        thresh_pso = joblib.load(os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib')) \
+            if os.path.exists(os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib')) else 0.5
             
         return {
             'mlp_base': model_base,
@@ -81,13 +103,21 @@ def load_prediction_resources():
             'target_encoder': target_encoder,
             'selected_features': selected_features,
             'lime_explainer': lime_explainer,
-            'parroquia_coords': parroquia_coords
-        }, None
+            'parroquia_coords': parroquia_coords,
+            'thresh_base': thresh_base,
+            'thresh_hybrid': thresh_hybrid,
+            'thresh_pso': thresh_pso
+        }
     except Exception as e:
-        return None, str(e)
+        raise e
 
 
-resources, error_msg = load_prediction_resources()
+try:
+    resources = load_prediction_resources()
+    error_msg = None
+except Exception as e:
+    resources = None
+    error_msg = str(e)
 
 if error_msg:
     st.error(f"Error al cargar los modelos de Inteligencia Artificial. Asegúrese de haber ejecutado el pipeline de entrenamiento (`main.py`) antes de realizar predicciones.\nDetalle: {error_msg}")
@@ -238,35 +268,40 @@ else:
             prob = model_ga.predict(x, verbose=0).astype(np.float64)
             return np.hstack((1.0 - prob, prob))
         
+        # Obtener los thresholds cargados
+        thresh_base = resources['thresh_base']
+        thresh_ga = resources['thresh_hybrid']
+        thresh_pso = resources['thresh_pso']
+        
         # Mostrar resultado
-        st.subheader("Resultados de la Inferencia Simultánea")
+        st.subheader("Resultados de la Inferencia Simultánea (Umbrales Adaptativos)")
         
         col_res1, col_res2, col_res3 = st.columns(3)
         
         with col_res1:
             st.markdown("<h4 style='text-align: center; color: #510A32;'>MLP Base</h4>", unsafe_allow_html=True)
-            if pred_base >= 0.5:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_base*100:.2f}%</div>', unsafe_allow_html=True)
+            if pred_base >= thresh_base:
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_base*100:.2f}%<br><small>Umbral Óptimo: {thresh_base*100:.1f}%</small></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_base*100:.2f}%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_base*100:.2f}%<br><small>Umbral Óptimo: {thresh_base*100:.1f}%</small></div>', unsafe_allow_html=True)
                 
         with col_res2:
-            st.markdown("<h4 style='text-align: center; color: #FF4B4B;'>MLP Híbrido (GA)</h4>", unsafe_allow_html=True)
-            if pred_ga >= 0.5:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_ga*100:.2f}%</div>', unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #FF4B4B;'>MLP + GA</h4>", unsafe_allow_html=True)
+            if pred_ga >= thresh_ga:
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_ga*100:.2f}%<br><small>Umbral Óptimo: {thresh_ga*100:.1f}%</small></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_ga*100:.2f}%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_ga*100:.2f}%<br><small>Umbral Óptimo: {thresh_ga*100:.1f}%</small></div>', unsafe_allow_html=True)
                 
         with col_res3:
-            st.markdown("<h4 style='text-align: center; color: #2ca02c;'>MLP Híbrido (PSO)</h4>", unsafe_allow_html=True)
-            if pred_pso >= 0.5:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_pso*100:.2f}%</div>', unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #2ca02c;'>MLP + PSO</h4>", unsafe_allow_html=True)
+            if pred_pso >= thresh_pso:
+                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_pso*100:.2f}%<br><small>Umbral Óptimo: {thresh_pso*100:.1f}%</small></div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_pso*100:.2f}%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_pso*100:.2f}%<br><small>Umbral Óptimo: {thresh_pso*100:.1f}%</small></div>', unsafe_allow_html=True)
                 
         # Explicación LIME del modelo principal debajo
         st.markdown("---")
-        st.subheader("Explicabilidad Local (LIME) del Modelo Principal (MLP Híbrido GA)")
+        st.subheader("Explicabilidad Local (LIME) del Modelo Principal (MLP + GA)")
         
         with st.spinner("Generando explicación del caso con LIME..."):
             exp = lime_explainer.explain_instance(
@@ -299,4 +334,4 @@ else:
                 margin=dict(l=20, r=20, t=40, b=20),
                 height=350
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')

@@ -1,0 +1,243 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\graphicspath{{prism-uploads/}}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\usepackage{cite}
+\usepackage{multirow}
+\usepackage{xcolor}
+
+\title{Predicción de la Localización de Personas Desaparecidas en Ecuador mediante Redes Neuronales MLP Optimizadas Comparativamente con Algoritmos Genéticos y Enjambre de Partículas}
+
+\author{
+\begin{tabular}{cc}
+\begin{minipage}{0.46\textwidth}
+\centering
+\textbf{1\textsuperscript{st} Luis Gonzalo Ordóñez Yaguana}\\
+\textit{Carrera de Ciencia de Datos e IA}\\
+\textit{Universidad Nacional de Chimborazo}\\
+\textit{Riobamba, Ecuador}\\
+gonzalo.ordonez@unach.edu.ec\\
+ORCID: 0009-0009-7864-837X
+\end{minipage}
+&
+\begin{minipage}{0.46\textwidth}
+\centering
+\textbf{2\textsuperscript{nd} Marcus Alexander Mayorga Martínez}\\
+\textit{Carrera de Ciencia de Datos e IA}\\
+\textit{Universidad Nacional de Chimborazo}\\
+\textit{Riobamba, Ecuador}\\
+marcus.mayorga@unach.edu.ec\\
+ORCID: 0009-0006-6916-9447
+\end{minipage}
+\\[4.0em]
+\begin{minipage}{0.46\textwidth}
+\centering
+\textbf{3\textsuperscript{rd} Jhoffre Marcelo Moreano Goyes}\\
+\textit{Carrera de Ciencia de Datos e IA}\\
+\textit{Universidad Nacional de Chimborazo}\\
+\textit{Riobamba, Ecuador}\\
+jhoffre.moreano@unach.edu.ec\\
+ORCID: 0009-0007-1521-4043
+\end{minipage}
+&
+\begin{minipage}{0.46\textwidth}
+\centering
+\textbf{4\textsuperscript{th} Juan Sebastián Caviedes Rodríguez}\\
+\textit{Carrera de Ciencia de Datos e IA}\\
+\textit{Universidad Nacional de Chimborazo}\\
+\textit{Riobamba, Ecuador}\\
+juan.caviedes@unach.edu.ec\\
+ORCID: 0009-0009-5098-892X
+\end{minipage}
+\end{tabular}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+La desaparición de personas constituye un problema social y operativo crítico que exige mecanismos de análisis rápidos y rigurosos. Este artículo documenta el desarrollo de un sistema predictivo para estimar la probabilidad de localización exitosa de personas desaparecidas en Ecuador durante el periodo 2017--2025. Se presenta una comparación de dos metodologías híbridas basadas en metaheurísticas poblacionales: un Perceptrón Multicapa (MLP) optimizado mediante un Algoritmo Genético (GA) y un modelo optimizado por Enjambre de Partículas (PSO). Ambas metaheurísticas exploran de forma automática la arquitectura de la red y los hiperparámetros (incluyendo regularización L2 y dropout). El pipeline incluye control de fuga de información, target encoding suavizado para categorías geográficas de alta cardinalidad, selección de variables por consenso y pesos de clase para contrarrestar el desbalanceo (93.18\% de localizaciones exitosas). Los resultados en el conjunto de prueba independiente demuestran que el MLP + GA obtuvo 90.44\% de exactitud y 0.6687 de F1-Score macro, mientras que el MLP + PSO alcanzó 90.13\% de exactitud y 0.6630 de F1-Score, ambos superando al MLP base. La explicabilidad local y global se aborda mediante SHAP y LIME para generar trazabilidad científica para los investigadores.
+\end{abstract}
+
+\begin{IEEEkeywords}
+personas desaparecidas, perceptrón multicapa, algoritmo genético, enjambre de partículas, regularización L2, pesos de clase, explicabilidad, LIME.
+\end{IEEEkeywords}
+
+\section{Introducción}
+La desaparición de personas representa una problemática social prioritaria en el Ecuador. La capacidad de las instituciones de seguridad para evaluar de manera oportuna el riesgo de un reporte depende en gran medida de procesar adecuadamente la información inicial demográfica y geográfica de la víctima \cite{biehal2003lost,phoenix2022police}. Dado que cerca del 93\% de las desapariciones concluyen en localizaciones exitosas, identificar eficientemente el pequeño porcentaje de casos complejos representa el reto analítico más importante.
+
+Los datos históricos recopilados por la Fiscalía General del Estado (FGE) y la Policía Nacional presentan un severo desbalanceo de clases y problemas de fuga de información (\textit{data leakage}), en donde variables como la fecha o ubicación de localización se encuentran pre-registradas en el historial histórico de forma redundante. Eliminar la fuga de datos es indispensable para que los clasificadores evalúen de forma realista en el ``día cero'' de la denuncia. 
+
+Este artículo propone y contrasta dos metaheurísticas bio-inspiradas para sintonizar hiperparámetros en redes neuronales densas (MLP): un Algoritmo Genético (GA) y una Optimización por Enjambre de Partículas (PSO). Las dos propuestas resuelven la optimización global sobre un espacio de búsqueda combinatorio expandido que incluye regularización L2 (weight decay) para controlar la complejidad en datos desbalanceados. El sistema resultante integra las inferencias con técnicas XAI (SHAP y LIME) en una interfaz interactiva de Streamlit para el personal policial.
+
+\section{Metodología}
+El flujo de trabajo metodológico está compuesto por ETL, selección por consenso de características, sintonización de hiperparámetros y explicabilidad local y global, siguiendo y expandiendo los marcos recientes de analítica de datos aplicados al contexto del territorio ecuatoriano \cite{espinoza2025predictive,quinga2025data}.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.98\linewidth]{nuevodiragaraama.png}
+\caption{Flujo general del sistema predictivo, desde el procesamiento ETL hasta el despliegue del modelo MLP optimizado.}
+\label{fig:pipeline}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.95\linewidth]{12_seleccion_consenso.png}
+\caption{Selección de características por consenso de votos (Pearson, Permutación, SHAP, RFE e Información Mutua) que reduce y define las 10 mejores variables para los modelos.}
+\label{fig:consenso}
+\end{figure}
+
+\subsection{ETL y Prevención de Fuga de Datos}
+A partir del dataset consolidado de 75,680 registros oficiales (2017--2025), se depuraron coordenadas espaciales nulas e inconsistencias temporales. Se eliminaron de raíz 17 columnas causantes de data leakage (como días de solución, provincia de localización, situación actual y motivos identificados a posteriori). 
+
+\subsection{Codificación y Pesos de Clase}
+Las variables espaciales de alta resolución (cantones, provincias) se codificaron usando target encoding regularizado con suavizado (smoothing) para evitar sobreajuste en los nombres categóricos de los cantones. El desbalanceo severo de clases (93.18\% clase favorable / 6.82\% desfavorable) se abordó mediante la asignación matemática de pesos de clase (\textit{Class Weights}) en la entropía cruzada binaria durante el entrenamiento. Esta técnica se seleccionó sobre remuestreos sintéticos (como SMOTE) debido a que preserva de forma pura la veracidad e integridad espacial de los registros originales en el territorio.
+
+\subsection{Selección de Características por Consenso}
+Se ejecutó un proceso de selección por consenso de 5 métodos de votación que seleccionó un vector final de 10 atributos de alta relevancia predictiva (Fig. \ref{fig:consenso}), priorizando la provincia, el cantón, coordenadas espaciales exactas, edad de la víctima y variables temporales.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{09_matriz_correlacion.png}
+\caption{Matriz de correlación de las variables numéricas empleadas durante el análisis exploratorio y la selección de características.}
+\label{fig:correlacion}
+\end{figure}
+
+\subsection{Optimización Metaheurística: GA y PSO con Inercia Decreciente}
+Para sintonizar la red MLP densa, se estructuró un espacio de búsqueda combinatorio integrado por la tasa de aprendizaje, el número de capas ocultas, neuronas, dropout, tamaño de lote, funciones de activación, optimizadores y la adición del coeficiente de regularización L2.
+\begin{itemize}
+    \item \textbf{Algoritmo Genético (MLP + GA):} Ejecutado mediante la librería DEAP utilizando selección por torneo ($k=3$), cruce uniforme ($p_x=0.7$), mutación uniforme indexada ($p_m=0.2$) y elitismo.
+    \item \textbf{Enjambre de Partículas (MLP + PSO):} Implementado con dinámica continua mapeada a índices discretos de la cuadrícula. Se incorporó el esquema de inercia lineal decreciente (\textit{Linear Inertia Weight Reduction - LIWR}) con un decaimiento del peso de inercia $w_t$ desde $w_{max} = 0.9$ (máxima exploración inicial) hasta $w_{min} = 0.4$ (máxima explotación y refinamiento al final de las iteraciones) para asegurar la convergencia de las partículas hacia los óptimos globales.
+    \item \textbf{Función Fitness y Umbral de Decisión Adaptativo:} La aptitud de cada configuración se evaluó mediante validación cruzada estratificada sobre el F1-Score Macro. Se implementó un barrido de umbrales dinámicos (de 0.25 a 0.75, paso 0.05) para calcular el F1 máximo posible de cada arquitectura. Tras el entrenamiento final completo, se refinó y persistió el threshold óptimo fino (paso 0.01) para cada clasificador.
+\end{itemize}
+
+\section{Configuración Experimental}
+La Tabla \ref{tab:config-red} detalla las arquitecturas e hiperparámetros óptimos resultantes de la sintonización automática en comparación con la línea base manual.
+
+\begin{table}[htbp]
+\caption{Parámetros de las Redes Neuronales Entrenadas}
+\label{tab:config-red}
+\centering
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Parámetro} & \textbf{MLP Base} & \textbf{MLP + GA} & \textbf{MLP + PSO} \\
+\midrule
+Capas ocultas & 2 & 4 & 4 \\
+Neuronas & 128 & 32 & 256 \\
+Activación & ReLU / Sigmoide & ReLU / Sigmoide & ReLU / Sigmoide \\
+Learning Rate & 0.001 & 0.005 & 0.001 \\
+Dropout & 0.3 & 0.0 & 0.0 \\
+Regularización L2 & Ninguna & 0.0001 & Ninguna \\
+Tamaño de Lote & 128 & 128 & 256 \\
+Optimizador & Adam & Adam & Adam \\
+Épocas & 30 & 100 & 100 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\linewidth]{13_evolucion_fitness_ga.png}
+\caption{Evolución de la aptitud durante la optimización de hiperparámetros mediante el algoritmo genético.}
+\label{fig:ga-fitness}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\linewidth]{13_evolucion_fitness_pso.png}
+\caption{Curva de convergencia de aptitud (Fitness) en la optimización por enjambre de partículas (PSO) utilizando decaimiento de inercia.}
+\label{fig:pso-fitness}
+\end{figure}
+
+\section{Resultados y Validación Estadística}
+Los tres clasificadores se evaluaron sobre un conjunto de test independiente (11,328 reportes) utilizando los thresholds óptimos refinados por modelo. La Tabla \ref{tab:experimentos} resume el comportamiento comparativo global de rendimiento predictivo y eficiencia.
+
+\begin{table}[htbp]
+\caption{Métricas Comparativas Experimentales (Test Set)}
+\label{tab:experimentos}
+\centering
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Modelo} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Log Loss} \\
+\midrule
+MLP Base & 89.52\% & 0.6429 & 0.7094 & 0.6671 & 0.4875 \\
+MLP + GA & 90.44\% & 0.6518 & 0.6921 & 0.6687 & 0.4601 \\
+MLP + PSO & 90.13\% & 0.6453 & 0.6887 & 0.6630 & 0.4534 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{14_curva_roc_comparativa.png}
+\caption{Curvas ROC comparativas obtenidas sobre el conjunto de prueba independiente para los tres modelos entrenados.}
+\label{fig:curvas-roc}
+\end{figure}
+
+Los optimizadores metaheurísticos incrementaron el Accuracy general (llegando al 90.44\% en el caso de GA) y redujeron el Log Loss (reducción a 0.4534 con PSO). Las latencias de inferencia de todos los modelos se situaron por debajo de los 0.07 ms por caso.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\linewidth]{15_curva_pr_comparativa.png}
+\caption{Curvas Precision--Recall comparativas sobre el conjunto de prueba para los tres modelos entrenados.}
+\label{fig:curvas-pr}
+\end{figure}
+
+Para validar el rigor científico de la mejora de las metaheurísticas, se aplicó la prueba estadística de significancia de McNemar.
+\begin{itemize}
+    \item \textbf{MLP Base vs. MLP + GA:} El test arrojó un estadístico Chi-cuadrado de \textbf{49.1157} con un p-valor de $\mathbf{2.41 \times 10^{-12}}$ ($p < 0.05$). Esto rechaza la hipótesis nula, demostrando que la superioridad del modelo GA sobre el base es altamente significativa.
+    \item \textbf{MLP + GA vs. MLP + PSO:} El test arrojó un estadístico Chi-cuadrado de \textbf{4.5333} con un p-valor de $\mathbf{3.32 \times 10^{-2}}$ ($p < 0.05$). Confirma diferencias predictivas significativas entre ambos métodos de optimización, estableciendo que la dinámica del GA se adaptó mejor al espacio de búsqueda de la MLP para este problema que el PSO con inercia lineal decreciente.
+\end{itemize}
+
+\section{Discusión y Explicabilidad}
+La incorporación de la regularización L2 en el espacio del Algoritmo Genético contribuyó a estabilizar el entrenamiento e impedir sobreajustes por memorización sobre las categorías geográficas y de edad. El uso de pesos de clase evitó la generación artificial de coordenadas geográficas ficticias que ocurriría con técnicas de interpolación.
+
+Para garantizar la transparencia y permitir a la Policía Nacional auditar las inferencias, se integró explicabilidad a dos niveles \cite{lundberg2017unified,ribeiro2016why}:
+\begin{itemize}
+    \item \textbf{SHAP (Explicación Global):} Evalúa la contribución general de cada característica. Permitió determinar que la provincia, la edad, el cantón y las coordenadas de latitud/longitud fueron las variables más determinantes a nivel general del modelo (Fig. \ref{fig:shap}).
+    \item \textbf{LIME (Explicación Local):} Justifica de forma individual y visual cada predicción en tiempo real en la aplicación web, ilustrando qué atributos específicos aumentaron o disminuyeron la probabilidad en la denuncia del día cero.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\linewidth]{11_shap_summary_bar.png}
+\caption{Importancia global de variables mediante el valor absoluto medio de SHAP para el modelo optimizado.}
+\label{fig:shap}
+\end{figure}
+
+\section{Conclusiones}
+Se construyó y validó un sistema predictivo híbrido utilizando redes neuronales MLP acopladas de manera comparativa a algoritmos evolutivos (GA) y optimizadores de enjambres (PSO). El modelo MLP + GA alcanzó una exactitud del 90.44\% y un F1-Score macro de 0.6687 en el test set. El test de McNemar confirmó la significancia estadística del desempeño de los optimizadores. El acoplamiento de LIME y SHAP junto a la visualización de la plataforma en Streamlit permite la integración de herramientas transparentes en tiempo real para agilizar la priorización de búsquedas policiales.
+
+\section*{Agradecimientos}
+Los autores agradecen el acompañamiento académico del Mgs. Marco Javier Castelo Cabay, profesor de asignatura, durante el desarrollo de la investigación.
+
+\begin{thebibliography}{00}
+\bibitem{aas2021explaining} K. Aas, M. Jullum, and A. Løland, ``Explaining individual predictions when features are dependent: More accurate approximations to Shapley values,'' \emph{Artificial Intelligence}, vol. 298, p. 103502, 2021.
+\bibitem{babuta2019machine} A. Babuta and M. Oswald, ``Data analytics and algorithms in policing in England and Wales: Towards a new policy framework,'' \emph{Royal United Services Institute}, 2019.
+\bibitem{biehal2003lost} N. Biehal, F. Mitchell, and J. Wade, \emph{Lost from View: Missing Persons in the UK}. Bristol, UK: Policy Press, 2003.
+\bibitem{chawla2002smote} N. V. Chawla, K. W. Bowyer, L. O. Hall, and W. P. Kegelmeyer, ``SMOTE: Synthetic minority over-sampling technique,'' \emph{Journal of Artificial Intelligence Research}, vol. 16, pp. 321--357, 2002.
+\bibitem{dietterich1998approximate} T. G. Dietterich, ``Approximate statistical tests for comparing supervised classification learning algorithms,'' \emph{Neural Computation}, vol. 10, no. 7, pp. 1895--1923, 1998.
+\bibitem{espinoza2025predictive} M. A. Espinoza-Mina and A. M. Colina Vargas, ``Predictive analysis of missing persons in Ecuador (2014--2024),'' in \emph{CEUR Workshop Proceedings}, vol. 4055, pp. 197--210, 2025.
+\bibitem{feurer2019hyperparameter} M. Feurer and F. Hutter, ``Hyperparameter optimization,'' in \emph{Automated Machine Learning}. Springer, 2019, pp. 3--33.
+\bibitem{goldberg1989genetic} D. E. Goldberg, \emph{Genetic Algorithms in Search, Optimization and Machine Learning}. Addison-Wesley, 1989.
+\bibitem{king2001logistic} G. King and L. Zeng, ``Logistic regression in rare events data,'' \emph{Political Analysis}, vol. 9, no. 2, pp. 137--163, 2001.
+\bibitem{lundberg2017unified} S. M. Lundberg and S.-I. Lee, ``A unified approach to interpreting model predictions,'' in \emph{Advances in Neural Information Processing Systems}, vol. 30, 2017.
+\bibitem{pdf2026version} F. P. D. F. Library, ``FPDF2 Python package documentation for PDF Generation,'' version 2.7.9, 2026.
+\bibitem{pargent2022regularized} F. Pargent, F. Pfisterer, J. Thomas, and B. Bischl, ``Regularized target encoding outperforms traditional methods in supervised machine learning with high cardinality features,'' \emph{Computational Statistics}, vol. 37, no. 5, pp. 2671--2692, 2022.
+\bibitem{phoenix2022police} J. Phoenix and B. Francis, ``Police risk assessment and case outcomes in missing person investigations,'' \emph{The Police Journal}, vol. 96, pp. 1--21, 2022.
+\bibitem{quinga2025data} P. Quinga, E. Jara, F. Cela, C. Coba, A. Pilco, and V. Moya, ``Data analysis of missing people in Ecuador,'' in \emph{Proc. LACCEI Int. Multi-Conf. Engineering, Education and Technology}, vol. 1, no. 12, 2025.
+\bibitem{ribeiro2016why} M. T. Ribeiro, S. Singh, and C. Guestrin, ``Why should I trust you?: Explaining the predictions of any classifier,'' in \emph{Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining}, 2016, pp. 1135--1144.
+\bibitem{tang2009svms} Y. Tang, Y.-Q. Zhang, N. V. Chawla, and S. Krasser, ``SVMs modeling for highly imbalanced classification,'' \emph{IEEE Transactions on Systems, Man, and Cybernetics, Part B}, vol. 39, no. 1, pp. 281--288, 2009.
+\end{thebibliography}
+
+\end{document}

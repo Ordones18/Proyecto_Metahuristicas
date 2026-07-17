@@ -87,10 +87,12 @@ def clean_data(df):
     
     # 3. Limpieza de edad
     df['edad'] = pd.to_numeric(df['edad'], errors='coerce')
-    # Imputar con la mediana de edad
-    edad_median = df['edad'].median()
-    df['edad'] = df['edad'].fillna(edad_median)
-    print(f"  - Imputada edad faltante con la mediana ({edad_median} años).")
+    # Filtrar valores imposibles antes de calcular la mediana (edad fuera de 0-110 años)
+    edad_valida = df['edad'][df['edad'].between(0, 110)]
+    edad_median = edad_valida.median()
+    # Reemplazar edades fuera del rango válido y NaN con la mediana
+    df['edad'] = df['edad'].where(df['edad'].between(0, 110)).fillna(edad_median)
+    print(f"  - Imputada/corregida edad con la mediana de valores válidos ({edad_median} años).")
     
     # 4. Limpieza de coordenadas de desaparición
     for col in ['latitud_desaparicion', 'longitud_desaparicion']:
@@ -258,10 +260,13 @@ def compare_scalers(X_train, y_train):
     print(f"  - StandardScaler F1-Score: {score_std:.5f}")
     print(f"  - MinMaxScaler F1-Score: {score_minmax:.5f}")
     
-    best_scaler = StandardScaler() if score_std >= score_minmax else MinMaxScaler()
-    print(f"  - Seleccionado: {best_scaler.__class__.__name__}")
-    
-    return best_scaler
+    # Devolver el scaler YA FITEADO para evitar un segundo fit innúceutilil en run_etl()
+    if score_std >= score_minmax:
+        print(f"  - Seleccionado: StandardScaler")
+        return scaler_std
+    else:
+        print(f"  - Seleccionado: MinMaxScaler")
+        return scaler_minmax
 
 
 def balance_data(X_train, y_train, method='weight'):
@@ -307,11 +312,11 @@ def run_etl(balance_method='weight'):
     # 5. Codificar categóricas
     X_train_enc, X_val_enc, X_test_enc = encode_categorical(X_train, X_val, X_test, y_train)
     
-    # 6. Comparar y ajustar Escalador
+    # 6. Comparar y seleccionar Escalador (ya devuelve el scaler fiteado en X_train)
     scaler = compare_scalers(X_train_enc, y_train)
     
-    # Ajustar escalador en entrenamiento y transformar
-    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train_enc), columns=X_train_enc.columns, index=X_train_enc.index)
+    # El scaler ya está fiteado en X_train por compare_scalers(), solo aplicar transform
+    X_train_scaled = pd.DataFrame(scaler.transform(X_train_enc), columns=X_train_enc.columns, index=X_train_enc.index)
     X_val_scaled = pd.DataFrame(scaler.transform(X_val_enc), columns=X_val_enc.columns, index=X_val_enc.index)
     X_test_scaled = pd.DataFrame(scaler.transform(X_test_enc), columns=X_test_enc.columns, index=X_test_enc.index)
     

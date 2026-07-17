@@ -52,7 +52,9 @@ def select_features(n_features_to_select=10):
     
     # --- MÉTODO 1: Análisis de Correlación ---
     print("  - Ejecutando Método 1: Análisis de Correlación (multicolinealidad)...")
-    corr_matrix = X_train.corr().abs()
+    # Usar X_sample (muestra ya preparada) para el cálculo de correlación:
+    # resultado prácticamente idéntico al de X_train completo pero mucho más rápido
+    corr_matrix = X_sample.corr().abs()
     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
     to_drop = [column for column in upper.columns if any(upper[column] > 0.90)]
     for col in to_drop:

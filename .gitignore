@@ -26,5 +26,6 @@ outputs/scratch/
 venv/
 env/
 
-#Archivos de instalación de cuda
+#Archivos cuda
+.cuda_cache/
 *.deb
