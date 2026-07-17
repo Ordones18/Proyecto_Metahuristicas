@@ -67,6 +67,11 @@ def load_prediction_resources():
             mode='classification',
             random_state=42
         )
+        
+        import json
+        with open(os.path.join(MODELS_DIR, 'parroquia_coords.json'), 'r', encoding='utf-8') as f:
+            parroquia_coords = json.load(f)
+            
         return {
             'mlp_base': model_base,
             'mlp_hybrid': model_hybrid,
@@ -75,7 +80,8 @@ def load_prediction_resources():
             'ohe': ohe,
             'target_encoder': target_encoder,
             'selected_features': selected_features,
-            'lime_explainer': lime_explainer
+            'lime_explainer': lime_explainer,
+            'parroquia_coords': parroquia_coords
         }, None
     except Exception as e:
         return None, str(e)
@@ -92,51 +98,70 @@ else:
     selected_features = resources['selected_features']
     lime_explainer = resources['lime_explainer']
     
-    # Formulario en columnas
-    with st.form("prediction_form"):
-        col1, col2, col3 = st.columns(3)
+    # Formulario interactivo sin st.form para soportar selectores dependientes en tiempo real
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.subheader("Datos de la Persona")
+        edad = st.number_input("Edad de la persona (Años)", min_value=0, max_value=120, value=25)
+        sexo = st.selectbox("Sexo", ["MUJER", "HOMBRE"])
+        etnia = st.selectbox("Etnia", ["MESTIZO/A", "INDIGENA", "AFRO", "MONTUBIO/A", "MULATO/A", "BLANCO/A", "OTROS", "SIN_DATO"])
+        nacionalidad = st.selectbox("Nacionalidad", ["ECUADOR", "VENEZUELA", "COLOMBIA", "PERU", "ESPAÑA", "ESTADOS UNIDOS", "OTROS"])
         
-        with col1:
-            st.subheader("Datos de la Persona")
-            edad = st.number_input("Edad de la persona (Años)", min_value=0, max_value=120, value=25)
-            sexo = st.selectbox("Sexo", ["MUJER", "HOMBRE"])
-            etnia = st.selectbox("Etnia", ["MESTIZO/A", "INDIGENA", "AFRO", "MONTUBIO/A", "MULATO/A", "BLANCO/A", "OTROS", "SIN_DATO"])
-            nacionalidad = st.selectbox("Nacionalidad", ["ECUADOR", "VENEZUELA", "COLOMBIA", "PERU", "ESPAÑA", "ESTADOS UNIDOS", "OTROS"])
+    with col2:
+        st.subheader("Ubicación del Suceso")
+        provincia = st.selectbox("Provincia", ["PICHINCHA", "GUAYAS", "MANABÍ", "AZUAY", "EL ORO", "LOS RÍOS", "CHIMBORAZO", "TUNGURAHUA", "SANTA ELENA", "ESMERALDAS", "LOJA"])
+        
+        # Cargar mapeo de parroquias y coordenadas
+        mapping = resources['parroquia_coords']
+        cantones_disponibles = sorted(list(mapping.keys()))
+        
+        # Intentar preseleccionar QUITO
+        default_canton_idx = cantones_disponibles.index("QUITO") if "QUITO" in cantones_disponibles else 0
+        canton = st.selectbox("Cantón", cantones_disponibles, index=default_canton_idx)
+        
+        # Cargar las parroquias del cantón seleccionado
+        parroquias_disponibles = sorted(list(mapping[canton].keys())) if canton in mapping else []
+        if not parroquias_disponibles:
+            parroquias_disponibles = ["SIN DATO"]
             
-        with col2:
-            st.subheader("Ubicación del Suceso")
-            provincia = st.selectbox("Provincia", ["PICHINCHA", "GUAYAS", "MANABÍ", "AZUAY", "EL ORO", "LOS RÍOS", "CHIMBORAZO", "TUNGURAHUA", "SANTA ELENA", "ESMERALDAS", "LOJA"])
-            canton = st.text_input("Cantón (Ej: GUAYAQUIL, QUITO, ALAUSI)", value="QUITO").upper()
-            zona = st.selectbox("Zona Policial", ["ZONA 9", "ZONA 8", "ZONA 1", "ZONA 2", "ZONA 3", "ZONA 4", "ZONA 5", "ZONA 6", "ZONA 7"])
+        parroquia = st.selectbox("Parroquia donde desapareció", parroquias_disponibles)
+        
+        # Asignar coordenadas automáticamente tras bambalinas
+        if canton in mapping and parroquia in mapping[canton]:
+            latitud, longitud = mapping[canton][parroquia]
+        else:
+            latitud, longitud = -0.1806, -78.4678 # Default Quito
             
-            # Coordenadas geográficas
-            latitud = st.number_input("Latitud de Desaparición", value=-0.1806, format="%.5f")
-            longitud = st.number_input("Longitud de Desaparición", value=-78.4678, format="%.5f")
-            
-        with col3:
-            st.subheader("Temporalidad")
-            anio = st.number_input("Año de Desaparición", min_value=2017, max_value=2030, value=2026)
-            mes = st.slider("Mes", 1, 12, 1)
-            dia = st.slider("Día del Mes", 1, 31, 15)
-            dia_semana = st.selectbox("Día de la Semana", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
-            
-            # Mapear día semana a numérico (0=Lunes, 6=Domingo)
-            dia_semana_map = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}
-            dia_semana_num = dia_semana_map[dia_semana]
-            
-            # Calcular trimestre y antigüedad ficticia (días transcurridos desde desaparición hasta 31-12-2025)
-            trimestre = (mes - 1) // 3 + 1
-            # Antigüedad en días relativa a 31-12-2025 (si el año ingresado es posterior, será negativo)
-            import datetime
-            try:
-                fecha_input = datetime.date(int(anio), int(mes), int(dia))
-                ref_date = datetime.date(2025, 12, 31)
-                antiguedad_dias = (ref_date - fecha_input).days
-            except ValueError:
-                st.error("La fecha seleccionada es inválida (por ejemplo, el día no existe en el mes seleccionado). Por favor verifique el día y el mes.")
-                st.stop()
-            
-        submit_btn = st.form_submit_button("Realizar Predicción Simultánea")
+        zona = st.selectbox("Zona Policial", ["ZONA 9", "ZONA 8", "ZONA 1", "ZONA 2", "ZONA 3", "ZONA 4", "ZONA 5", "ZONA 6", "ZONA 7"])
+        
+        # Mostrar coordenadas calculadas discretamente
+        st.info(f"📍 Coordenadas Parroquia: Lat: {latitud:.4f}, Lon: {longitud:.4f}")
+        
+    with col3:
+        st.subheader("Temporalidad")
+        anio = st.number_input("Año de Desaparición", min_value=2017, max_value=2030, value=2026)
+        mes = st.slider("Mes", 1, 12, 1)
+        dia = st.slider("Día del Mes", 1, 31, 15)
+        dia_semana = st.selectbox("Día de la Semana", ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"])
+        
+        # Mapear día semana a numérico (0=Lunes, 6=Domingo)
+        dia_semana_map = {"Lunes": 0, "Martes": 1, "Miércoles": 2, "Jueves": 3, "Viernes": 4, "Sábado": 5, "Domingo": 6}
+        dia_semana_num = dia_semana_map[dia_semana]
+        
+        # Calcular trimestre y antigüedad ficticia (días transcurridos desde desaparición hasta 31-12-2025)
+        trimestre = (mes - 1) // 3 + 1
+        # Antigüedad en días relativa a 31-12-2025 (si el año ingresado es posterior, será negativo)
+        import datetime
+        try:
+            fecha_input = datetime.date(int(anio), int(mes), int(dia))
+            ref_date = datetime.date(2025, 12, 31)
+            antiguedad_dias = (ref_date - fecha_input).days
+        except ValueError:
+            st.error("La fecha seleccionada es inválida (por ejemplo, el día no existe en el mes seleccionado). Por favor verifique el día y el mes.")
+            st.stop()
+        
+    submit_btn = st.button("Realizar Predicción Simultánea")
         
     if submit_btn:
         # Preprocesar datos de entrada

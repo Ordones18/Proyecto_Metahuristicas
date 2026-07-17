@@ -1,5 +1,5 @@
 # Predicción de Personas Desaparecidas en Ecuador (2017-2025)
-## Modelo Híbrido: Redes Neuronales MLP optimizadas mediante Algoritmos Genéticos
+## Modelo Híbrido: Redes Neuronales MLP optimizadas mediante Algoritmos Genéticos y Enjambre de Partículas
 
 Este repositorio contiene la arquitectura de software, el pipeline de datos científico y la interfaz web interactiva para predecir la probabilidad de éxito de localización de personas reportadas como desaparecidas en el Ecuador. La fundamentación técnica y la metodología del proyecto están estructuradas bajo los estándares de publicaciones científicas de la IEEE.
 
@@ -32,8 +32,8 @@ La solución integra un pipeline de Machine Learning estructurado en fases conse
 graph TD
     A[Datos Crudos Excel] --> B[Fase 1: ETL & Codificación de Alta Cardinalidad]
     B --> C[Fase 2: Selección de Variables por Consenso]
-    C --> D[Fase 3: Optimización Evolutiva - Algoritmo Genético]
-    D --> E[Fase 4: Entrenamiento MLP Híbrido GA & XGBoost RandomSearch]
+    C --> D[Fase 3: Optimización Metaheurística - GA y PSO]
+    D --> E[Fase 4: Entrenamiento de Modelos (Base, GA, PSO)]
     E --> F[Fase 5: Validación Estadística - Test de McNemar]
     F --> G[Fase 6: Explicabilidad Local LIME & Dashboard Streamlit]
 ```
@@ -51,18 +51,14 @@ Para evitar el sesgo de seleccionar variables con un único algoritmo, el módul
 - **Eliminación Recursiva de Características (RFE)**
 - **Información Mutua (Mutual Information)**
 
-### 3. Sintonización Metaheurística (Algoritmo Genético)
-La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas (MLP) es ineficiente y no garantiza óptimos globales en espacios de alta dimensionalidad. Se implementó un **Algoritmo Genético** estructurado en **DEAP**:
-- **Cromosoma**: Representa la arquitectura (capas, neuronas, activación), learning rate, tasa de dropout, batch size, optimizador y épocas.
-- **Operadores**: Selección por Torneo ($k=3$), Cruce de Dos Puntos ($p_x = 0.7$), Mutación Uniforme ($p_m = 0.2$) y Elitismo del mejor individuo.
-- **Función Fitness**: Maximización del **Macro F1-Score** obtenido a través de validación cruzada estratificada sobre el conjunto de entrenamiento.
+### 3. Sintonización Metaheurística (Algoritmo Genético y Enjambre de Partículas)
+La búsqueda manual o por grilla de hiperparámetros en redes neuronales densas (MLP) es ineficiente y no garantiza óptimos globales en espacios de alta dimensionalidad. El proyecto implementa dos optimizadores bio-inspirados en paralelo sobre el mismo espacio de búsqueda:
+- **Algoritmo Genético (GA) en DEAP**: Sintoniza el cromosoma del MLP utilizando selección por torneo ($k=3$), cruce uniforme ($p_x=0.7$), mutación uniforme indexada ($p_m=0.2$) y elitismo.
+- **Optimización por Enjambre de Partículas (PSO) Manual**: Mapea posiciones continuas del enjambre a los índices discretos del espacio de hiperparámetros, actualizando velocidades según componentes inerciales, cognitivos e influencia social global.
+- **Función Fitness**: Maximización del **Macro F1-Score** promedio obtenido mediante validación cruzada estratificada rápida sobre el conjunto de entrenamiento.
 
-### 4. Modelo de Gradient Boosting Challenger (XGBoost)
-Como contraste metodológico y estándar de la industria, se entrena secuencialmente un modelo **XGBoost (Extreme Gradient Boosting)** sobre el mismo set de datos preprocesado.
-- **Sintonización Tradicional:** Se optimizan sus hiperparámetros de profundidad, estimadores y tasa de aprendizaje de forma automática utilizando **RandomizedSearchCV** con validación cruzada estratificada de 3-folds.
-
-### 5. Validación Científica y Explicabilidad (XAI)
-- **Significancia Estadística (Test de McNemar)**: Determina si las diferencias predictivas entre el MLP Base, el MLP Híbrido y el XGBoost son estadísticamente significativas analizando las tablas de contingencia de aciertos y desaciertos conjuntos.
+### 4. Validación Científica y Explicabilidad (XAI)
+- **Significancia Estadística (Test de McNemar)**: Determina si las diferencias predictivas entre el MLP Base, el MLP Híbrido (GA) y el MLP Híbrido (PSO) son estadísticamente significativas analizando las tablas de contingencia de aciertos y desaciertos conjuntos en el set de test independiente.
 - **Interpretabilidad Local (LIME)**: Rompe el paradigma de la "caja negra" de los modelos supervisados, generando regresiones lineales locales que explican visualmente al usuario qué variables individuales (ej. edad, sexo, provincia) aumentaron o disminuyeron la probabilidad de localización en cada predicción en tiempo real.
 
 ---
@@ -75,16 +71,18 @@ Por rigurosidad científica y metodológica, el proyecto utiliza de forma exclus
 
 ## 📊 Resultados de los Modelos (Conjunto de Test)
 
-| Métrica | MLP Base (Estático) | MLP Híbrido (Optimizado por GA) | XGBoost (Challenger + RandomSearch) | Mejora Híbrido vs Base |
+| Métrica | MLP Base (Estático) | MLP Híbrido (GA) | MLP Híbrido (PSO) | Mejora (PSO vs Base) |
 | :--- | :---: | :---: | :---: | :---: |
-| **Accuracy (Exactitud)** | 74.89% | **76.99%** | 76.02% | **+2.81%** 🟢 |
-| **F1-Score (Macro)** | 0.5792 | **0.5919** | 0.5853 | **+2.19%** 🟢 |
-| **Log Loss (Pérdida)** | 0.4794 | 0.4731 | **0.4372** | **-1.31% (Reducción)** 🟢 |
-| **PR-AUC (Área PR)** | 0.9881 | 0.9859 | **0.9886** | **-0.22%** 🟡 |
-| **Tiempo de Entrenamiento** | 35.40 s | **6.46 s** | 15.43 s | **-81.76% (Reducción)** 🟢 |
-| **Latencia de Inferencia** | 0.0386 ms | **0.0286 ms** | 0.0398 ms | **-26.03% (Reducción)** 🟢 |
+| **Accuracy (Exactitud)** | 74.56% | 78.35% | **79.01%** | **+4.45%** 🟢 |
+| **F1-Score (Macro)** | 0.5771 | 0.6007 | **0.6043** | **+2.72%** 🟢 |
+| **Log Loss (Pérdida)** | 0.4797 | 0.4438 | **0.3737** | **-22.10% (Reducción)** 🟢 |
+| **PR-AUC (Área PR)** | **0.9879** | **0.9879** | 0.9870 | **-0.09%** 🟡 |
+| **Tiempo de Entrenamiento** | 19.49 s | **12.87 s** | 100.26 s | *Búsqueda global extendida* ⏳ |
+| **Latencia de Inferencia** | **0.0254 ms** | 0.0261 ms | 0.0277 ms | *Diferencia marginal* ⚡ |
 
-- **Resultado de los Tests de McNemar**: El p-valor obtenido de **$0.00$** en la comparación MLP Base vs. Híbrido, y de **$2.67 \times 10^{-4}$** en la comparación MLP Híbrido vs. XGBoost, demuestra que las diferencias predictivas entre todos los modelos son **altamente significativas estadísticamente** (con un nivel de significancia de $\alpha = 0.05$). La sintonización evolutiva del GA sobre el MLP y la sintonización por RandomizedSearchCV en XGBoost proveen comportamientos predictivos diferenciados de alta calidad sobre el test set.
+- **Resultado de los Tests de McNemar**: 
+  1. **MLP Base vs. MLP Híbrido (GA)**: Chi-cuadrado de **345.94**, p-valor de **0.00** ($p < 0.05$). Indica que la mejora del GA es estadísticamente altamente significativa.
+  2. **MLP Híbrido (GA) vs. MLP Híbrido (PSO)**: Chi-cuadrado de **22.97**, p-valor de **1.65e-06** ($p < 0.05$). Indica diferencias predictivas estadísticamente significativas entre ambos métodos de optimización, consolidando a PSO como el modelo óptimo con mejor Accuracy, F1 y menor Log Loss.
 
 ---
 
@@ -113,7 +111,7 @@ Proyecto/
 │   ├── feature_engineering.py      # Filtro de variables por consenso y fallback dinámico
 │   ├── model_base.py               # Entrenamiento del modelo estático con logs compactos
 │   ├── model_hybrid.py             # Estructuración y corrida de DEAP con logs compactos
-│   ├── model_xgboost.py            # Entrenamiento y sintonía fina de XGBoost (Challenger)
+│   ├── model_pso.py                # Optimización por Enjambre de Partículas (PSO)
 │   ├── evaluation.py               # Test de McNemar y curvas ROC/PR
 │   └── interpretability.py         # Explicabilidad local y global
 ├── main.py                         # Orquestador del pipeline completo en consola
@@ -269,8 +267,8 @@ Una vez abierta la aplicación en tu navegador web:
    * **ETL:** Carga y limpia los datos, aplicando target encoding y estructurando los pesos de clase.
    * **EDA:** Genera reportes visuales descriptivos interactivos.
    * **Selección por Consenso:** Reduce las variables a las 10 mejores.
-   * **Modelado:** Entrena el MLP Base, optimiza el MLP Híbrido mediante el Algoritmo Genético, y sintoniza el **XGBoost** mediante `RandomizedSearchCV`.
-   * **Evaluación & XAI:** Corre el Test de McNemar y prepara las explicaciones locales de LIME.
+   * **Modelado:** Entrena el MLP Base, optimiza el MLP Híbrido (GA), y sintoniza el MLP Híbrido (PSO).
+   * **Evaluación & XAI:** Corre los Tests de McNemar y prepara las explicaciones locales de LIME.
 2. **Explorar el Dashboard:** Revisa mapas de calor geográficos y KPIs demográficos calculados dinámicamente.
-3. **Realice Predicciones:** Ingresa casos de prueba individuales para estimar el riesgo de localización en tiempo real y obtener explicaciones LIME interactivas eligiendo cualquiera de los 3 modelos.
+3. **Realice Predicciones:** Ingresa casos de prueba individuales para estimar el riesgo de localización en tiempo real y obtener explicaciones LIME interactivas visualizando los tres modelos de forma simultánea.
 4. **Comparar:** Analiza curvas ROC, Precision-Recall y matrices de confusión interactivas en la sección de **Comparación**.

@@ -20,21 +20,21 @@ El resultado es un sistema robusto que combina la **búsqueda global inteligente
 
 ---
 
-## 2. El Contrincante Científico: XGBoost + RandomizedSearchCV
-Para validar la efectividad de la optimización evolutiva sobre las redes neuronales, el proyecto incorpora una comparación rigurosa con el estándar industrial de aprendizaje supervisado sobre datos tabulares:
+## 2. El Optimizador de Enjambre de Partículas (MLP + PSO)
+Para contrastar y validar la efectividad del Algoritmo Genético, el proyecto incorpora una segunda metaheurística basada en poblaciones para sintonizar los mismos 8 hiperparámetros bajo el mismo espacio de búsqueda combinatorio discreto:
 
-### A. XGBoost (Extreme Gradient Boosting)
-* **¿Qué es?** Es una implementación optimizada y eficiente del algoritmo de Gradient Boosting. En lugar de utilizar redes neuronales, construye un ensamble secuencial de **árboles de decisión asimétricos**. Cada nuevo árbol se entrena para corregir los errores residuales (gradientes) cometidos por los árboles anteriores.
-* **Ventajas en Ciencia de Datos:** Es extremadamente rápido, maneja de forma eficiente datos estructurados y cuenta con un fuerte soporte de regularización matemática integrada para evitar el sobreajuste.
+### A. Optimización por Enjambre de Partículas (PSO)
+* **¿Qué es?** Es un algoritmo de optimización global bio-inspirado en el comportamiento social y de bandadas de aves o peces (Kennedy & Eberhart, 1995).
+* **¿Cómo funciona?** A diferencia del GA que utiliza operadores discretos de cruce y mutación, el PSO inicializa un "enjambre" de partículas en un espacio de búsqueda continuo multidimensional. Cada partícula mantiene una posición y una velocidad. La velocidad se actualiza en cada iteración en función de:
+  - **Inercia:** Conserva parte de la velocidad anterior.
+  - **Componente Cognitivo:** Atracción hacia la mejor posición histórica que la propia partícula ha visitado (`pbest`).
+  - **Componente Social:** Atracción hacia la mejor posición global encontrada por todo el enjambre (`gbest`).
+* **Sintonización de MLP:** Aunque el espacio de búsqueda del MLP es de naturaleza discreta y combinatoria, el PSO opera en coordenadas reales continuas. Para resolver esto, las posiciones se redondean y acotan a los índices enteros correspondientes de la grilla de hiperparámetros (`GA_PARAM_SPACE`). Esto permite explotar la dinámica cinético-social del PSO para resolver problemas discretos complejos.
 
-### B. RandomizedSearchCV (Búsqueda Aleatoria con Validación Cruzada)
-* **¿Qué es?** Es un método estadístico estándar para la optimización de hiperparámetros. 
-* **¿Cómo funciona?** En lugar de probar exhaustivamente todas las combinaciones posibles de parámetros de XGBoost (lo cual sería computacionalmente inviable), selecciona al azar una muestra de configuraciones de una grilla predefinida (por ejemplo, muestreando profundidades del árbol, tasas de aprendizaje y número de estimadores). Evalúa cada configuración utilizando **validación cruzada de K-folds** (en este caso, 3-folds) para asegurar que el rendimiento sea generalizable y no dependa de una partición específica de los datos.
-
-### C. Rigor de la Comparativa
-Enfrentar **MLP+GA** contra **XGBoost + RandomizedSearchCV** es el diseño experimental óptimo porque:
-* **Comparación Justa:** Evita comparar un modelo optimizado (MLP+GA) contra un modelo base sin optimizar (XGBoost por defecto), lo que invalidaría científicamente los resultados. Ambos algoritmos se evalúan en su "mejor versión posible".
-* **Contraste de Paradigmas:** Compara la optimización basada en procesos evolutivos aplicados a modelos biológicos (Redes Neuronales) contra la optimización basada en muestreo aleatorio aplicada a modelos lógicos (Árboles de Decisión).
+### B. Rigor de la Comparativa (GA vs. PSO)
+La comparación directa de **MLP+GA** frente a **MLP+PSO** representa un marco científico riguroso por dos motivos:
+* **Entorno Experimental Idéntico:** Ambos algoritmos evalúan exactamente los mismos hiperparámetros discretos (capas, neuronas, activación, dropout, tasa de aprendizaje, batch, optimizador y épocas) usando la misma función de fitness basada en Macro F1-Score bajo validación cruzada rápida, evitando sesgos de implementación.
+* **Contraste de Metaheurísticas de Población:** Permite contrastar la exploración/explotación de un algoritmo evolutivo (GA) basado en la supervivencia del más apto frente a la dinámica cooperativa y de seguimiento social de un optimizador de enjambres (PSO).
 
 ---
 
