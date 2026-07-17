@@ -128,7 +128,7 @@ def evaluate_models():
     metrics = {}
     
     # Base Model
-    metrics['MLP Base'] = {
+    metrics['Base'] = {
         'Accuracy': accuracy_score(y_test, preds_base),
         'Precision': precision_score(y_test, preds_base, average='macro'),
         'Recall': recall_score(y_test, preds_base, average='macro'),
@@ -141,10 +141,10 @@ def evaluate_models():
     
     # Calcular PR-AUC para modelo base
     p_b, r_b, _ = precision_recall_curve(y_test, probs_base)
-    metrics['MLP Base']['PR-AUC'] = auc(r_b, p_b)
+    metrics['Base']['PR-AUC'] = auc(r_b, p_b)
     
     # Hybrid Model GA
-    metrics['MLP + GA'] = {
+    metrics['Hybrid'] = {
         'Accuracy': accuracy_score(y_test, preds_hybrid),
         'Precision': precision_score(y_test, preds_hybrid, average='macro'),
         'Recall': recall_score(y_test, preds_hybrid, average='macro'),
@@ -157,10 +157,10 @@ def evaluate_models():
     
     # Calcular PR-AUC para modelo híbrido GA
     p_h, r_h, _ = precision_recall_curve(y_test, probs_hybrid)
-    metrics['MLP + GA']['PR-AUC'] = auc(r_h, p_h)
+    metrics['Hybrid']['PR-AUC'] = auc(r_h, p_h)
     
     # Hybrid Model PSO
-    metrics['MLP + PSO'] = {
+    metrics['PSO'] = {
         'Accuracy': accuracy_score(y_test, preds_pso),
         'Precision': precision_score(y_test, preds_pso, average='macro'),
         'Recall': recall_score(y_test, preds_pso, average='macro'),
@@ -173,21 +173,21 @@ def evaluate_models():
     
     # Calcular PR-AUC para PSO
     p_p, r_p, _ = precision_recall_curve(y_test, probs_pso)
-    metrics['MLP + PSO']['PR-AUC'] = auc(r_p, p_p)
+    metrics['PSO']['PR-AUC'] = auc(r_p, p_p)
     
     df_metrics = pd.DataFrame(metrics).T
     
     # Calcular mejoras porcentuales de GA sobre Base
-    df_metrics.loc['Mejora MLP+GA (%)'] = ((df_metrics.loc['MLP + GA'] - df_metrics.loc['MLP Base']) / df_metrics.loc['MLP Base']) * 100
+    df_metrics.loc['Mejora GA (%)'] = ((df_metrics.loc['Hybrid'] - df_metrics.loc['Base']) / df_metrics.loc['Base']) * 100
     # Para Log Loss e Inferencia, menor es mejor, la mejora es inversa
-    df_metrics.loc['Mejora MLP+GA (%)', 'Log_Loss'] = ((df_metrics.loc['MLP Base', 'Log_Loss'] - df_metrics.loc['MLP + GA', 'Log_Loss']) / df_metrics.loc['MLP Base', 'Log_Loss']) * 100
-    df_metrics.loc['Mejora MLP+GA (%)', 'Inference_Time_ms'] = ((df_metrics.loc['MLP Base', 'Inference_Time_ms'] - df_metrics.loc['MLP + GA', 'Inference_Time_ms']) / df_metrics.loc['MLP Base', 'Inference_Time_ms']) * 100
+    df_metrics.loc['Mejora GA (%)', 'Log_Loss'] = ((df_metrics.loc['Base', 'Log_Loss'] - df_metrics.loc['Hybrid', 'Log_Loss']) / df_metrics.loc['Base', 'Log_Loss']) * 100
+    df_metrics.loc['Mejora GA (%)', 'Inference_Time_ms'] = ((df_metrics.loc['Base', 'Inference_Time_ms'] - df_metrics.loc['Hybrid', 'Inference_Time_ms']) / df_metrics.loc['Base', 'Inference_Time_ms']) * 100
     
     # Calcular mejoras porcentuales de PSO sobre Base
-    df_metrics.loc['Mejora MLP+PSO (%)'] = ((df_metrics.loc['MLP + PSO'] - df_metrics.loc['MLP Base']) / df_metrics.loc['MLP Base']) * 100
+    df_metrics.loc['Mejora PSO (%)'] = ((df_metrics.loc['PSO'] - df_metrics.loc['Base']) / df_metrics.loc['Base']) * 100
     # Para Log Loss e Inferencia, menor es mejor, la mejora es inversa
-    df_metrics.loc['Mejora MLP+PSO (%)', 'Log_Loss'] = ((df_metrics.loc['MLP Base', 'Log_Loss'] - df_metrics.loc['MLP + PSO', 'Log_Loss']) / df_metrics.loc['MLP Base', 'Log_Loss']) * 100
-    df_metrics.loc['Mejora MLP+PSO (%)', 'Inference_Time_ms'] = ((df_metrics.loc['MLP Base', 'Inference_Time_ms'] - df_metrics.loc['MLP + PSO', 'Inference_Time_ms']) / df_metrics.loc['MLP Base', 'Inference_Time_ms']) * 100
+    df_metrics.loc['Mejora PSO (%)', 'Log_Loss'] = ((df_metrics.loc['Base', 'Log_Loss'] - df_metrics.loc['PSO', 'Log_Loss']) / df_metrics.loc['Base', 'Log_Loss']) * 100
+    df_metrics.loc['Mejora PSO (%)', 'Inference_Time_ms'] = ((df_metrics.loc['Base', 'Inference_Time_ms'] - df_metrics.loc['PSO', 'Inference_Time_ms']) / df_metrics.loc['Base', 'Inference_Time_ms']) * 100
     
     print(f"\n  - Tabla Comparativa de Métricas:\n{df_metrics.to_string()}")
     
