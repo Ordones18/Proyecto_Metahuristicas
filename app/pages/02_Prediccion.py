@@ -68,8 +68,12 @@ def load_prediction_resources():
         from lime import lime_tabular
         project_dir = os.path.dirname(MODELS_DIR)
         X_train_explain = pd.read_csv(os.path.join(project_dir, 'data', 'processed', 'X_train_selected.csv'))
+        
+        # Muestrear a 1000 registros para que el cálculo inicial de LIME tome milisegundos en Streamlit
+        X_train_explain_sampled = X_train_explain.sample(n=1000, random_state=42) if len(X_train_explain) > 1000 else X_train_explain
+        
         lime_explainer = lime_tabular.LimeTabularExplainer(
-            training_data=X_train_explain.values,
+            training_data=X_train_explain_sampled.values,
             feature_names=selected_features,
             class_names=['No Encontrado', 'Encontrado'],
             mode='classification',
@@ -279,25 +283,103 @@ else:
         col_res1, col_res2, col_res3 = st.columns(3)
         
         with col_res1:
-            st.markdown("<h4 style='text-align: center; color: #510A32;'>MLP Base</h4>", unsafe_allow_html=True)
-            if pred_base >= thresh_base:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_base*100:.2f}%<br><small>Umbral Óptimo: {thresh_base*100:.1f}%</small></div>', unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #9C27B0; margin-bottom: 0;'>MLP Base</h4>", unsafe_allow_html=True)
+            prob_b_pct = pred_base * 100
+            thresh_b_pct = thresh_base * 100
+            is_success_b = pred_base >= thresh_base
+            
+            if is_success_b:
+                diag_b = f"La probabilidad de localización ({prob_b_pct:.1f}%) supera el umbral de corte ({thresh_b_pct:.1f}%), lo que clasifica el caso como favorable."
+                st.markdown(f"""
+                <div class="result-box risk-low">
+                    <span style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">LOCALIZACIÓN EXITOSA</span>
+                    <hr style="border-color: rgba(76, 175, 80, 0.4); margin: 0.6rem 0;">
+                    <div style="font-size: 0.9rem; font-weight: 400; text-align: left; line-height: 1.3; color: #ffffff;">
+                        • <b>Prob. Localización:</b> {prob_b_pct:.2f}%<br>
+                        • <b>Umbral de Corte:</b> {thresh_b_pct:.1f}%<br><br>
+                        <span style="font-size: 0.8rem; color: #a5d6a7; display: block;">{diag_b}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_base*100:.2f}%<br><small>Umbral Óptimo: {thresh_base*100:.1f}%</small></div>', unsafe_allow_html=True)
+                diag_b = f"La probabilidad de localización ({prob_b_pct:.1f}%) no supera el umbral de corte ({thresh_b_pct:.1f}%), clasificando el caso como de alto riesgo."
+                st.markdown(f"""
+                <div class="result-box risk-high">
+                    <span style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">RIESGO NO LOCALIZACIÓN</span>
+                    <hr style="border-color: rgba(244, 67, 54, 0.4); margin: 0.6rem 0;">
+                    <div style="font-size: 0.9rem; font-weight: 400; text-align: left; line-height: 1.3; color: #ffffff;">
+                        • <b>Prob. Localización:</b> {prob_b_pct:.2f}%<br>
+                        • <b>Umbral de Corte:</b> {thresh_b_pct:.1f}%<br><br>
+                        <span style="font-size: 0.8rem; color: #ef9a9a; display: block;">{diag_b}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
         with col_res2:
-            st.markdown("<h4 style='text-align: center; color: #FF4B4B;'>MLP + GA</h4>", unsafe_allow_html=True)
-            if pred_ga >= thresh_ga:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_ga*100:.2f}%<br><small>Umbral Óptimo: {thresh_ga*100:.1f}%</small></div>', unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #FF4B4B; margin-bottom: 0;'>MLP + GA</h4>", unsafe_allow_html=True)
+            prob_ga_pct = pred_ga * 100
+            thresh_ga_pct = thresh_ga * 100
+            is_success_ga = pred_ga >= thresh_ga
+            
+            if is_success_ga:
+                diag_ga = f"La probabilidad de localización ({prob_ga_pct:.1f}%) supera el umbral de corte ({thresh_ga_pct:.1f}%), lo que clasifica el caso como favorable."
+                st.markdown(f"""
+                <div class="result-box risk-low">
+                    <span style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">LOCALIZACIÓN EXITOSA</span>
+                    <hr style="border-color: rgba(76, 175, 80, 0.4); margin: 0.6rem 0;">
+                    <div style="font-size: 0.9rem; font-weight: 400; text-align: left; line-height: 1.3; color: #ffffff;">
+                        • <b>Prob. Localización:</b> {prob_ga_pct:.2f}%<br>
+                        • <b>Umbral de Corte:</b> {thresh_ga_pct:.1f}%<br><br>
+                        <span style="font-size: 0.8rem; color: #a5d6a7; display: block;">{diag_ga}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_ga*100:.2f}%<br><small>Umbral Óptimo: {thresh_ga*100:.1f}%</small></div>', unsafe_allow_html=True)
+                diag_ga = f"La probabilidad de localización ({prob_ga_pct:.1f}%) no supera el umbral de corte ({thresh_ga_pct:.1f}%), clasificando el caso como de alto riesgo."
+                st.markdown(f"""
+                <div class="result-box risk-high">
+                    <span style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">RIESGO NO LOCALIZACIÓN</span>
+                    <hr style="border-color: rgba(244, 67, 54, 0.4); margin: 0.6rem 0;">
+                    <div style="font-size: 0.9rem; font-weight: 400; text-align: left; line-height: 1.3; color: #ffffff;">
+                        • <b>Prob. Localización:</b> {prob_ga_pct:.2f}%<br>
+                        • <b>Umbral de Corte:</b> {thresh_ga_pct:.1f}%<br><br>
+                        <span style="font-size: 0.8rem; color: #ef9a9a; display: block;">{diag_ga}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
         with col_res3:
-            st.markdown("<h4 style='text-align: center; color: #2ca02c;'>MLP + PSO</h4>", unsafe_allow_html=True)
-            if pred_pso >= thresh_pso:
-                st.markdown(f'<div class="result-box risk-low">LOCALIZACIÓN EXITOSA<br><br>Probabilidad: {pred_pso*100:.2f}%<br><small>Umbral Óptimo: {thresh_pso*100:.1f}%</small></div>', unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: #2ca02c; margin-bottom: 0;'>MLP + PSO</h4>", unsafe_allow_html=True)
+            prob_pso_pct = pred_pso * 100
+            thresh_pso_pct = thresh_pso * 100
+            is_success_pso = pred_pso >= thresh_pso
+            
+            if is_success_pso:
+                diag_pso = f"La probabilidad de localización ({prob_pso_pct:.1f}%) supera el umbral de corte ({thresh_pso_pct:.1f}%), lo que clasifica el caso como favorable."
+                st.markdown(f"""
+                <div class="result-box risk-low">
+                    <span style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">LOCALIZACIÓN EXITOSA</span>
+                    <hr style="border-color: rgba(76, 175, 80, 0.4); margin: 0.6rem 0;">
+                    <div style="font-size: 0.9rem; font-weight: 400; text-align: left; line-height: 1.3; color: #ffffff;">
+                        • <b>Prob. Localización:</b> {prob_pso_pct:.2f}%<br>
+                        • <b>Umbral de Corte:</b> {thresh_pso_pct:.1f}%<br><br>
+                        <span style="font-size: 0.8rem; color: #a5d6a7; display: block;">{diag_pso}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="result-box risk-high">RIESGO NO LOCALIZACIÓN<br><br>Probabilidad: {pred_pso*100:.2f}%<br><small>Umbral Óptimo: {thresh_pso*100:.1f}%</small></div>', unsafe_allow_html=True)
+                diag_pso = f"La probabilidad de localización ({prob_pso_pct:.1f}%) no supera el umbral de corte ({thresh_pso_pct:.1f}%), clasificando el caso como de alto riesgo."
+                st.markdown(f"""
+                <div class="result-box risk-high">
+                    <span style="font-size: 1.2rem; display: block; margin-bottom: 0.2rem;">RIESGO NO LOCALIZACIÓN</span>
+                    <hr style="border-color: rgba(244, 67, 54, 0.4); margin: 0.6rem 0;">
+                    <div style="font-size: 0.9rem; font-weight: 400; text-align: left; line-height: 1.3; color: #ffffff;">
+                        • <b>Prob. Localización:</b> {prob_pso_pct:.2f}%<br>
+                        • <b>Umbral de Corte:</b> {thresh_pso_pct:.1f}%<br><br>
+                        <span style="font-size: 0.8rem; color: #ef9a9a; display: block;">{diag_pso}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
         # Explicación LIME del modelo principal debajo
         st.markdown("---")

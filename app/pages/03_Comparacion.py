@@ -59,17 +59,37 @@ def load_comparison_data():
         X_test = pd.read_csv(os.path.join(processed_dir, 'X_test_selected.csv'))
         y_test = pd.read_csv(os.path.join(processed_dir, 'y_test.csv')).values.ravel()
         
-        model_base = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_base.keras'))
-        model_hybrid = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_hybrid.keras'))
-        model_pso = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_pso.keras'))
-        
-        probs_base = model_base.predict(X_test, verbose=0).ravel()
-        probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
-        probs_pso = model_pso.predict(X_test, verbose=0).ravel()
-        
-        preds_base = (probs_base >= 0.5).astype(int)
-        preds_hybrid = (probs_hybrid >= 0.5).astype(int)
-        preds_pso = (probs_pso >= 0.5).astype(int)
+        predictions_path = os.path.join(models_dir, 'test_predictions.joblib')
+        if os.path.exists(predictions_path):
+            preds_dict = joblib.load(predictions_path)
+            probs_base = preds_dict['probs_base']
+            probs_hybrid = preds_dict['probs_hybrid']
+            probs_pso = preds_dict['probs_pso']
+        else:
+            model_base = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_base.keras'))
+            model_hybrid = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_hybrid.keras'))
+            model_pso = tf.keras.models.load_model(os.path.join(models_dir, 'mlp_pso.keras'))
+            
+            probs_base = model_base.predict(X_test, verbose=0).ravel()
+            probs_hybrid = model_hybrid.predict(X_test, verbose=0).ravel()
+            probs_pso = model_pso.predict(X_test, verbose=0).ravel()
+            
+            joblib.dump({
+                'probs_base': probs_base,
+                'probs_hybrid': probs_hybrid,
+                'probs_pso': probs_pso
+            }, predictions_path)
+            
+        thresh_base = joblib.load(os.path.join(models_dir, 'mlp_base_threshold.joblib')) \
+            if os.path.exists(os.path.join(models_dir, 'mlp_base_threshold.joblib')) else 0.5
+        thresh_hybrid = joblib.load(os.path.join(models_dir, 'mlp_hybrid_threshold.joblib')) \
+            if os.path.exists(os.path.join(models_dir, 'mlp_hybrid_threshold.joblib')) else 0.5
+        thresh_pso = joblib.load(os.path.join(models_dir, 'mlp_pso_threshold.joblib')) \
+            if os.path.exists(os.path.join(models_dir, 'mlp_pso_threshold.joblib')) else 0.5
+            
+        preds_base = (probs_base >= thresh_base).astype(int)
+        preds_hybrid = (probs_hybrid >= thresh_hybrid).astype(int)
+        preds_pso = (probs_pso >= thresh_pso).astype(int)
         
         hist_base = joblib.load(os.path.join(models_dir, 'mlp_base_history.joblib'))
         hist_hybrid = joblib.load(os.path.join(models_dir, 'mlp_hybrid_history.joblib'))
@@ -109,6 +129,40 @@ else:
     df_metrics = pd.read_csv(metrics_csv_path)
     df_metrics.columns = ['Modelo'] + list(df_metrics.columns[1:])
     
+    # Estandarizar nombres de la columna Modelo
+    rename_map = {
+        'Base': 'MLP Base',
+        'Hybrid': 'MLP + GA',
+        'PSO': 'MLP + PSO',
+        'Mejora GA (%)': 'Mejora MLP+GA (%)'
+    }
+    df_metrics['Modelo'] = df_metrics['Modelo'].replace(rename_map)
+    
+    # Asegurar que exista la fila de Mejora MLP+PSO (%) de forma dinámica
+    if not df_metrics['Modelo'].str.contains('Mejora MLP\\+PSO').any():
+        base_row = df_metrics[df_metrics['Modelo'] == 'MLP Base']
+        pso_row = df_metrics[df_metrics['Modelo'] == 'MLP + PSO']
+        
+        if not base_row.empty and not pso_row.empty:
+            mejoras_pso = ['Mejora MLP+PSO (%)']
+            for col in df_metrics.columns[1:]:
+                try:
+                    val_b = float(base_row[col].values[0])
+                    val_p = float(pso_row[col].values[0])
+                    
+                    if col in ['Log_Loss', 'Inference_Time_ms', 'Train_Time']:
+                        # Para pérdida y tiempos, menor es mejor
+                        imp = ((val_b - val_p) / val_b) * 100 if val_b != 0 else 0.0
+                    else:
+                        # Para exactitud/recall/precision, mayor es mejor
+                        imp = ((val_p - val_b) / val_b) * 100 if val_b != 0 else 0.0
+                    mejoras_pso.append(imp)
+                except:
+                    mejoras_pso.append(0.0)
+            
+            df_imp_pso = pd.DataFrame([mejoras_pso], columns=df_metrics.columns)
+            df_metrics = pd.concat([df_metrics, df_imp_pso], ignore_index=True)
+            
     st.dataframe(df_metrics.style.format(precision=4), width='stretch')
     
     st.info("**Nota sobre las métricas:** En *Accuracy, Precision, Recall, F1-Score, ROC-AUC y PR-AUC*, una mejora positiva indica un aumento del desempeño. Para *Log_Loss e Inference_Time_ms*, una mejora positiva indica una reducción del error/tiempo (menor es mejor).")
