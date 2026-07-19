@@ -165,7 +165,7 @@ else:
             
     st.dataframe(df_metrics.style.format(precision=4), width='stretch')
     
-    st.info("**Nota sobre las métricas:** En *Accuracy, Precision, Recall, F1-Score, ROC-AUC y PR-AUC*, una mejora positiva indica un aumento del desempeño. Para *Log_Loss e Inference_Time_ms*, una mejora positiva indica una reducción del error/tiempo (menor es mejor).")
+    st.info("**Nota sobre las métricas:** En *Accuracy, Precision, Recall, F1-Score, ROC-AUC y PR-AUC*, una mejora positiva indica un aumento del desempeño. Para *Log_Loss e Inference_Time_ms*, una mejora positiva indica una reducción del error/tiempo (menor es mejor). **Importante:** Dado el desbalanceo de clases en el dataset (93.18% clase favorable), se recomienda priorizar el *F1-Score (Macro)* y el *Recall (Sensibilidad)* para una correcta evaluación de la discriminación operativa.")
     
     st.subheader("Validación Estadística (Test de McNemar)")
     if os.path.exists(mcnemar_txt_path):

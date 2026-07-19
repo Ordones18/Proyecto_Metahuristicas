@@ -73,18 +73,25 @@ Por rigurosidad científica y metodológica, el proyecto utiliza de forma exclus
 
 ## 📊 Resultados de los Modelos (Conjunto de Test)
 
+> 💡 **Nota sobre el Desbalanceo de Clases y Métricas:** Dado el severo desbalanceo del dataset (93.18% de casos localizados con éxito), la exactitud (*Accuracy*) es una métrica sesgada si se analiza de forma aislada (un modelo ingenuo que prediga que todos serán encontrados tendría 93.18% de exactitud). Por tanto, la validación y selección del proyecto priorizan el **F1-Score (Macro)** y la **Sensibilidad (Recall)** de la clase crítica como los verdaderos indicadores de desempeño científico y utilidad operativa en rescate policial.
+
 | Métrica | MLP Base | MLP + GA | MLP + PSO | Mejora MLP+GA (%) | Mejora MLP+PSO (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Accuracy (Exactitud)** | 74.56% | 78.35% | **79.01%** | **+5.08%** 🟢 | **+5.97%** 🟢 |
-| **F1-Score (Macro)** | 0.5771 | 0.6007 | **0.6043** | **+4.09%** 🟢 | **+4.71%** 🟢 |
-| **Log Loss (Pérdida)** | 0.4797 | 0.4438 | **0.3737** | **-7.48%** 🟢 | **-22.10%** 🟢 |
-| **PR-AUC (Área PR)** | **0.9879** | **0.9879** | 0.9870 | **0.00%** 🟡 | **-0.09%** 🟡 |
-| **Tiempo de Entrenamiento** | 19.49 s | **12.87 s** | 100.26 s | **-33.97%** 🟢 | *Búsqueda global* ⏳ |
-| **Latencia de Inferencia** | **0.0254 ms** | 0.0261 ms | 0.0277 ms | *Diferencia marginal* ⚡ | *Diferencia marginal* ⚡ |
+| **Accuracy (Exactitud)** | **90.78%** | 90.73% | 90.17% | -0.05% 🔴 | -0.67% 🔴 |
+| **F1-Score (Macro)** | 0.6714 | **0.6745** | 0.6702 | **+0.46%** 🟢 | -0.18% 🔴 |
+| **Log Loss (Pérdida)** | 0.4718 | **0.4692** | 0.4704 | **-0.56%** 🟢 | **-0.29%** 🟢 |
+| **PR-AUC (Área PR)** | 0.9877 | 0.9873 | **0.9881** | -0.04% 🔴 | **+0.04%** 🟢 |
+| **Tiempo de Entrenamiento** | 163.15 s | 374.52 s | **98.74 s** | +129.56% 🔴 | **-39.48%** 🟢 |
+| **Latencia de Inferencia** | **0.0519 ms** | 0.0601 ms | 0.0654 ms | +15.64% 🔴 | +25.92% 🔴 |
+
+- **Análisis de Compromiso (Trade-offs)**:
+  * 🏆 **MLP Base (Ganador en Eficiencia y Exactitud Global):** Ofrece el mejor Accuracy (90.78%) y la menor latencia de inferencia (0.0519 ms). Al no tener diferencias estadísticas significativas con MLP+GA, representa la mejor opción para el despliegue general en producción.
+  * 🧬 **MLP + GA (Ganador en F1-Score):** Obtiene el mejor F1-Score Macro (0.6745) y menor pérdida Log Loss (0.4692), sintonizando mejor la regularización L2.
+  * 🐝 **MLP + PSO (Ganador en Recall, Robustez y Reentrenamiento):** Registra el Recall más alto (**70.09%**) y las mejores áreas bajo la curva (ROC-AUC de **0.8672** y PR-AUC de **0.9881**), además de ser un **39.48% más rápido de entrenar** (98.74 s). Es la opción recomendada para aplicaciones operativas críticas de búsqueda policial donde se prioriza capturar la mayor cantidad de localizaciones reales (minimizar falsos negativos).
 
 - **Resultado de los Tests de McNemar**: 
-  1. **MLP Base vs. MLP + GA**: Chi-cuadrado de **345.94**, p-valor de **0.00** ($p < 0.05$). Indica que la mejora de la metaheurística GA es estadísticamente altamente significativa.
-  2. **MLP + GA vs. MLP + PSO**: Chi-cuadrado de **22.97**, p-valor de **1.65e-06** ($p < 0.05$). Indica diferencias predictivas estadísticamente significativas entre ambos métodos de optimización, consolidando a PSO como el modelo óptimo con mejor Accuracy, F1 y menor Log Loss.
+  1. **MLP Base vs. MLP + GA**: Chi-cuadrado de **0.0838**, p-valor de **0.7723** ($p > 0.05$). Indica que no existe una diferencia predictiva estadísticamente significativa entre ambos modelos, lo que consolida al modelo **MLP Base** como la opción preferible por simplicidad y menor costo operativo.
+  2. **MLP + GA vs. MLP + PSO**: Chi-cuadrado de **15.1489**, p-valor de **9.94e-05** ($p < 0.05$). Indica diferencias predictivas estadísticamente significativas entre ambos métodos de sintonización, donde la optimización discreta de GA superó al enfoque continuo de PSO.
 
 ---
 

@@ -21,24 +21,24 @@ def load_metrics():
     from src.config import REPORTS_DIR
     csv_path = os.path.join(REPORTS_DIR, "model_comparison_metrics.csv")
     metrics = {
-        "acc_base": 0.7890,
-        "acc_hybrid": 0.8879,
-        "acc_pso": 0.8350,
-        "f1_base": 0.5999,
-        "f1_hybrid": 0.6609,
-        "f1_pso": 0.6300,
-        "loss_base": 0.3854,
-        "loss_hybrid": 0.2516,
-        "loss_pso": 0.2900,
-        "time_base": 0.0291,
-        "time_hybrid": 0.0254,
-        "time_pso": 0.0280,
-        "train_base": 65.13,
-        "train_hybrid": 125.42,
-        "train_pso": 105.42,
-        "f1_improvement": 10.17,
-        "acc_improvement": 12.53,
-        "loss_reduction": 34.70,
+        "acc_base": 0.9078,
+        "acc_hybrid": 0.9073,
+        "acc_pso": 0.9017,
+        "f1_base": 0.6714,
+        "f1_hybrid": 0.6745,
+        "f1_pso": 0.6702,
+        "loss_base": 0.4718,
+        "loss_hybrid": 0.4692,
+        "loss_pso": 0.4704,
+        "time_base": 0.0519,
+        "time_hybrid": 0.0601,
+        "time_pso": 0.0654,
+        "train_base": 163.15,
+        "train_hybrid": 374.52,
+        "train_pso": 98.74,
+        "f1_improvement": 0.4628,
+        "acc_improvement": -0.0486,
+        "loss_reduction": 0.5565,
         "loaded_from_csv": False
     }
     if os.path.exists(csv_path):
@@ -326,7 +326,7 @@ def show_inicio():
 
     # Título principal de la aplicación
     st.markdown('<h1 class="main-title" id="main_title_h1">Predicción de Personas Desaparecidas en Ecuador</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="subtitle">Modelo Híbrido de Inteligencia Artificial: Redes de Perceptrón Multicapa (MLP) optimizadas con Algoritmos Genéticos (GA)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Modelo Híbrido de Inteligencia Artificial: Redes de Perceptrón Multicapa (MLP) optimizadas con Algoritmos Genéticos (GA) y Enjambre de Partículas (PSO)</p>', unsafe_allow_html=True)
 
     # Cargar métricas
     metrics = load_metrics()
@@ -459,6 +459,12 @@ def show_inicio():
             "A continuación se presentan los resultados obtenidos al comparar el clasificador MLP base "
             "(con hiperparámetros estáticos) frente a los modelos optimizados metaheurísticamente por el Algoritmo Genético y Enjambre de Partículas (PSO):"
         )
+        st.info(
+            "💡 **Nota sobre el Desbalanceo de Clases:** Dado que el 93.18% de las personas reportadas son localizadas con vida, "
+            "la exactitud (Accuracy) es una métrica engañosa si se analiza sola (un modelo tonto que diga que todos serán encontrados tendría 93.18% de exactitud). "
+            "Por ello, la sintonización e interpretación de este proyecto se centran en el **F1-Score (Macro)** y la **Sensibilidad (Recall)** "
+            "para garantizar que la Policía Nacional pueda detectar eficazmente los casos complejos de alto riesgo."
+        )
 
         col_r1, col_r2 = st.columns([1, 1])
         
@@ -506,27 +512,27 @@ def show_inicio():
             # Gráfico de tiempos
             fig_time = go.Figure()
             fig_time.add_trace(go.Bar(
-                x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
+                x=['Entrenamiento (seg)', 'Inferencia (µs)'],
                 y=[metrics['train_base'], metrics['time_base'] * 1000],
                 name='MLP Base',
                 marker_color='#510A32',
-                text=[f"{metrics['train_base']:.1f} s", f"{metrics['time_base']*1000:.2f} ms"],
+                text=[f"{metrics['train_base']:.1f} s", f"{metrics['time_base']*1000:.2f} µs"],
                 textposition='auto'
             ))
             fig_time.add_trace(go.Bar(
-                x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
+                x=['Entrenamiento (seg)', 'Inferencia (µs)'],
                 y=[metrics['train_hybrid'], metrics['time_hybrid'] * 1000],
                 name='MLP + GA',
                 marker_color='#8A2387',
-                text=[f"{metrics['train_hybrid']:.1f} s", f"{metrics['time_hybrid']*1000:.2f} ms"],
+                text=[f"{metrics['train_hybrid']:.1f} s", f"{metrics['time_hybrid']*1000:.2f} µs"],
                 textposition='auto'
             ))
             fig_time.add_trace(go.Bar(
-                x=['Entrenamiento (seg)', 'Inferencia x1000 (ms)'],
+                x=['Entrenamiento (seg)', 'Inferencia (µs)'],
                 y=[metrics['train_pso'], metrics['time_pso'] * 1000],
                 name='MLP + PSO',
                 marker_color='#2ca02c',
-                text=[f"{metrics['train_pso']:.1f} s", f"{metrics['time_pso']*1000:.2f} ms"],
+                text=[f"{metrics['train_pso']:.1f} s", f"{metrics['time_pso']*1000:.2f} µs"],
                 textposition='auto'
             ))
             fig_time.update_layout(
@@ -546,13 +552,28 @@ def show_inicio():
         
         st.markdown('<h4 style="color: #FF4B4B; font-weight: 600;">Validación Estadística</h4>', unsafe_allow_html=True)
         if mcnemar['loaded']:
-            st.success(
-                f":material/verified: **Prueba de McNemar exitosa**: El test estadístico arrojó un estadístico Chi-cuadrado de "
-                f"**{mcnemar['chi2']}** y un p-valor de **{mcnemar['p_val']}**. Dado que el p-valor es inferior al nivel "
-                f"de significancia estándar $\\alpha = 0.05$, se concluye que hay una **{mcnemar['sig']}**. "
-                f"Las optimizaciones metaheurísticas proveen modelos robustos y "
-                f"significativamente superiores al modelo base en términos predictivos."
-            )
+            try:
+                # Intenta convertir p_val de notación científica o string
+                p_val_float = float(mcnemar['p_val'])
+            except Exception:
+                p_val_float = 1.0
+
+            if p_val_float < 0.05:
+                st.success(
+                    f":material/verified: **Prueba de McNemar exitosa**: El test estadístico arrojó un estadístico Chi-cuadrado de "
+                    f"**{mcnemar['chi2']}** y un p-valor de **{mcnemar['p_val']}**. Dado que el p-valor es inferior al nivel "
+                    f"de significancia estándar $\\alpha = 0.05$, se concluye que hay una **{mcnemar['sig']}**. "
+                    f"Las optimizaciones metaheurísticas proveen modelos robustos y "
+                    f"significativamente superiores al modelo base en términos predictivos."
+                )
+            else:
+                st.success(
+                    f":material/verified: **Prueba de McNemar exitosa**: El test estadístico arrojó un estadístico Chi-cuadrado de "
+                    f"**{mcnemar['chi2']}** y un p-valor de **{mcnemar['p_val']}**. Dado que el p-valor es mayor o igual al nivel "
+                    f"de significancia estándar $\\alpha = 0.05$, se concluye que hay una **{mcnemar['sig']}**. "
+                    f"Esto confirma que no hay diferencias predictivas estadísticamente significativas entre la MLP Base y el MLP Híbrido (GA), "
+                    f"posicionando a la MLP Base como el mejor modelo por simplicidad, eficiencia y exactitud general."
+                )
         else:
             st.success(
                 ":material/verified: **Prueba de McNemar exitosa**: Se registra una diferencia estadísticamente altamente significativa "
@@ -575,21 +596,21 @@ def show_inicio():
                 f"{metrics['f1_base']:.4f}", 
                 f"{metrics['loss_base']:.4f}", 
                 f"{metrics['train_base']:.2f} s", 
-                f"{metrics['time_base'] * 1000:.3f} ms"
+                f"{metrics['time_base']:.4f} ms"
             ],
             "MLP Híbrido (Optimizado GA)": [
                 f"{metrics['acc_hybrid']*100:.2f}%", 
                 f"{metrics['f1_hybrid']:.4f}", 
                 f"{metrics['loss_hybrid']:.4f}", 
                 f"{metrics['train_hybrid']:.2f} s", 
-                f"{metrics['time_hybrid'] * 1000:.3f} ms"
+                f"{metrics['time_hybrid']:.4f} ms"
             ],
             "MLP Híbrido (Optimizado PSO)": [
                 f"{metrics['acc_pso']*100:.2f}%", 
                 f"{metrics['f1_pso']:.4f}", 
                 f"{metrics['loss_pso']:.4f}", 
                 f"{metrics['train_pso']:.2f} s", 
-                f"{metrics['time_pso'] * 1000:.3f} ms"
+                f"{metrics['time_pso']:.4f} ms"
             ]
         })
         st.table(tabla_datos)

@@ -73,3 +73,18 @@ donde $w_{max} = 0.9$ (máxima exploración del espacio en las primeras iteracio
 
 ### D. Optimización de Recursos de GPU y Gestión de Contextos en TensorFlow
 Debido a la naturaleza iterativa de las metaheurísticas (que evalúan docenas de configuraciones de redes neuronales consecutivamente), se integró `K.clear_session()` y el borrado explícito de variables en cada ciclo de fitness. Esto, junto a la configuración del crecimiento dinámico de memoria (`memory_growth`) en el proceso principal y los hilos de la aplicación Streamlit, evita la acumulación y fuga de grafos computacionales en la VRAM de la GPU, garantizando ejecuciones estables y libres de errores `Out Of Memory` (OOM).
+
+---
+
+## 5. Justificación Científica de la Selección de Métricas
+En problemas de clasificación con clases severamente desbalanceadas (como en este estudio, donde la clase favorable representa el 93.18%), la selección de métricas es un factor metodológico crítico:
+
+### A. La Paradoja de la Exactitud (Accuracy Paradox)
+La exactitud (*Accuracy*) mide la proporción de predicciones correctas sobre el total. Si un clasificador ingenuo clasificara todas las denuncias en la clase mayoritaria (*Localizada*), su exactitud sería del 93.18%. No obstante, este clasificador sería incapaz de detectar un solo caso de alto riesgo (0% de sensibilidad en la clase minoritaria), resultando inútil desde el punto de vista operativo. Por ende, la exactitud no refleja la capacidad discriminativa real del modelo.
+
+### B. El Rol del F1-Score (Macro)
+El F1-Score es la media armónica entre la precisión y la sensibilidad (*Recall*). Al emplear el promedio **Macro**, se evalúa el F1-Score de cada clase con el mismo peso, sin importar su frecuencia en el dataset. Un modelo con predicciones ingenuas o sesgadas hacia la clase mayoritaria obtendría un F1-Score de 0 en la clase crítica y una puntuación macro drásticamente penalizada (~0.48). Esto convierte al F1-Score Macro en la métrica ideal para la sintonización hiperparamétrica y la comparación científica.
+
+### C. La Prioridad Operativa de la Sensibilidad (Recall)
+Para la Policía Nacional, el costo de un **falso negativo** es sumamente alto: clasificar un caso de desaparición compleja como "fácilmente localizable", provocando una respuesta tardía o nula que ponga en riesgo la vida de la víctima. 
+Por lo tanto, maximizar la **Sensibilidad (Recall)** de la clase crítica (*No Localizado*) es la máxima prioridad en el terreno operativo. Esto justifica por qué el modelo **MLP + PSO**, al alcanzar el Recall más alto (**70.09%**), se postula como una herramienta de alto valor operacional para la seguridad pública en Ecuador, complementando la eficiencia de la MLP base.
