@@ -1,7 +1,7 @@
 # Predicción de Personas Desaparecidas en Ecuador (2017-2025)
 ## Modelo Híbrido: Redes Neuronales MLP optimizadas mediante Algoritmos Genéticos y Enjambre de Partículas
 
-Este repositorio contiene la arquitectura de software, el pipeline de datos científico y la interfaz web interactiva para predecir la probabilidad de éxito de localización de personas reportadas como desaparecidas en el Ecuador. La fundamentación técnica y la metodología del proyecto están estructuradas bajo los estándares de publicaciones científicas de la IEEE.
+Este repositorio contiene la arquitectura de software, el pipeline de datos científico y la interfaz web interactiva para predecir la probabilidad de éxito de localización de personas reportadas como desaparecidas en el Ecuador. La fundamentación técnica y la metodología del proyecto están estructuradas bajo un enfoque metodológico riguroso y formal.
 
 ---
 
@@ -112,7 +112,7 @@ Proyecto/
 ├── models/                         # Pesos .keras y codificadores .joblib
 ├── outputs/
 │   ├── logs/                       # Log de ejecución persistente del pipeline
-│   └── reports/                    # Reportes Excel y Artículo IEEE en Markdown
+│   └── reports/                    # Reportes Excel y Artículo en Markdown
 ├── src/
 │   ├── config.py                   # Semillas, rutas y espacio de búsqueda del GA
 │   ├── etl.py                      # Limpieza, codificación y pesos de clase

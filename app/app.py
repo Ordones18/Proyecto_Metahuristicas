@@ -379,7 +379,7 @@ def show_inicio():
             st.markdown('<h4 style="color: #FF8F00; font-weight: 600;">Mitigación de Fuga de Información (Data Leakage)</h4>', unsafe_allow_html=True)
             st.markdown("""
             Un error común en modelos predictivos de seguridad es entrenar algoritmos con variables recolectadas *después* de la resolución del caso. 
-            Para asegurar la validez científica y el apego a estándares **IEEE**, eliminamos variables como:
+            Para asegurar la validez y el rigor metodológico, eliminamos variables como:
             * `fecha_localizacion`, `provincia_localizacion`, `dias_solucion` (solo existen tras resolver el caso).
             * `motivo_desaparicion` y `estado_desaparecido` (sesgan directamente al modelo).
             """)
@@ -451,7 +451,7 @@ def show_inicio():
                 F --> G[Fase 6: Explicabilidad LIME]
             ```
             """)
-            st.caption("Diagrama de flujo del pipeline híbrido estructurado bajo estándares IEEE.")
+            st.caption("Diagrama de flujo del pipeline híbrido de datos y modelado.")
 
     with tab_results:
         st.markdown('<h3 style="color: #FF4B4B; font-weight: 600; margin-top:0;">Métricas Comparativas Experimentales</h3>', unsafe_allow_html=True)
@@ -618,26 +618,37 @@ def show_inicio():
     # Bloque de información académica e investigadores
     st.markdown("""
     <div class="academic-card">
-        <h4 style="color: #FF4B4B; margin-top: 0; font-weight: 600; font-size:1.15rem;">Información Académica y Créditos</h4>
-        <p style="font-size:0.9rem; color:#C0C0C0; margin-bottom: 0.8rem;">
-            Investigación desarrollada y estructurada para cumplimiento de publicaciones de Inteligencia Artificial bajo el estándar IEEE.
-        </p>
-        <div style="margin-bottom:0.5rem;">
-            <strong>Autores e Investigadores:</strong>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 0.8rem;">
+            <span style="font-size: 1.5rem; color: #FF4B4B;">🎓</span>
+            <h4 style="color: #FF4B4B; margin: 0; font-weight: 600; font-size:1.2rem;">Proyecto de Investigación Académica</h4>
         </div>
-        <span class="author-badge">Juan Caviedes</span>
-        <span class="author-badge">Marcus Mayorga</span>
-        <span class="author-badge">Jhoffre Moreano</span>
-        <span class="author-badge">Luis Ordoñez</span>
-        <div style="margin-top:0.8rem; font-size:0.85rem; color:#B0B0B0;">
-            <strong>Institución:</strong> Universidad Nacional de Chimborazo
+        <p style="font-size:0.9rem; color:#D0D0D0; line-height: 1.5; margin-bottom: 1rem;">
+            Desarrollo de un sistema predictivo para la estimación de éxito en la localización de personas desaparecidas en Ecuador mediante Inteligencia Artificial y metaheurísticas de optimización.
+        </p>
+        <div style="display: grid; grid-template-columns: 1fr; gap: 0.6rem; font-size: 0.9rem; color: #E0E0E0; margin-bottom: 1rem;">
+            <div>
+                <strong>Autores:</strong>
+                <div style="margin-top: 0.4rem;">
+                    <span class="author-badge">Juan Caviedes</span>
+                    <span class="author-badge">Marcus Mayorga</span>
+                    <span class="author-badge">Jhoffre Moreano</span>
+                    <span class="author-badge">Luis Ordóñez</span>
+                </div>
+            </div>
+            <div style="margin-top: 0.3rem;">
+                <strong>Acompañamiento Académico (Tutor):</strong><br>
+                <span style="color: #FF4B4B; font-weight: 500;">Mgs. Marco Castelo Cabay</span>
+            </div>
+            <div style="margin-top: 0.3rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.6rem; font-size: 0.85rem; color: #B0B0B0; line-height: 1.4;">
+                🏫 <strong>Institución:</strong> Universidad Nacional de Chimborazo<br>
+                🧬 <strong>Carrera:</strong> Ciencia de Datos e Inteligencia Artificial
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     # Pie de página
     st.write("---")
-    st.caption("Desarrollado bajo las normas IEEE para publicaciones de Inteligencia Artificial - 2026")
     st.caption("Para navegar, utilice el menú desplegable a la izquierda.")
 
 # Definir las páginas usando st.Page y Google Material Icons para una UI profesional
