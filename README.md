@@ -33,7 +33,7 @@ graph TD
     A[Datos Crudos Excel] --> B[Fase 1: ETL & Codificación de Alta Cardinalidad]
     B --> C[Fase 2: Selección de Variables por Consenso]
     C --> D[Fase 3: Optimización Metaheurística - GA y PSO]
-    D --> E[Fase 4: Entrenamiento de Modelos (Base, GA, PSO)]
+    D --> E["Fase 4: Entrenamiento de Modelos (Base, GA, PSO)"]
     E --> F[Fase 5: Validación Estadística - Test de McNemar]
     F --> G[Fase 6: Explicabilidad Local LIME & Dashboard Streamlit]
 ```

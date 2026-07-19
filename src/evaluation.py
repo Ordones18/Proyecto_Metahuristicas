@@ -21,6 +21,51 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.config import RANDOM_SEED, PROCESSED_DATA_DIR, MODELS_DIR, FIGURES_DIR, REPORTS_DIR
 
+def load_keras_model_safe(file_path):
+    import zipfile, json, tempfile, shutil
+    temp_dir = tempfile.mkdtemp()
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        config_path = os.path.join(temp_dir, 'config.json')
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        def clean_config(obj):
+            if isinstance(obj, dict):
+                if 'class_name' in obj:
+                    if obj['class_name'] == 'GlorotUniform':
+                        return 'glorot_uniform'
+                    if obj['class_name'] == 'Zeros':
+                        return 'zeros'
+                if 'quantization_config' in obj:
+                    del obj['quantization_config']
+                for k, v in list(obj.items()):
+                    obj[k] = clean_config(v)
+            elif isinstance(obj, list):
+                obj = [clean_config(i) for i in obj]
+            return obj
+        config = clean_config(config)
+        with open(config_path, 'w') as f:
+            json.dump(config, f)
+        
+        # Save fixed model file in the same directory but with a unique name
+        fixed_path = file_path + '.fixed_compat.keras'
+        with zipfile.ZipFile(fixed_path, 'w', zipfile.ZIP_DEFLATED) as zip_out:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    full_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(full_path, temp_dir)
+                    zip_out.write(full_path, rel_path)
+        model = tf.keras.models.load_model(fixed_path)
+        try:
+            os.remove(fixed_path)
+        except OSError:
+            pass
+        return model
+    finally:
+        shutil.rmtree(temp_dir)
+
+
 def run_mcnemar_test(y_true, y_pred1, y_pred2):
     """
     Realiza la prueba estadística de McNemar para comparar dos modelos.
@@ -66,9 +111,9 @@ def evaluate_models():
     
     # 2. Cargar modelos
     print("  - Cargando modelos entrenados...")
-    model_base = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_base.keras'))
-    model_hybrid = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
-    model_pso = tf.keras.models.load_model(os.path.join(MODELS_DIR, 'mlp_pso.keras'))
+    model_base = load_keras_model_safe(os.path.join(MODELS_DIR, 'mlp_base.keras'))
+    model_hybrid = load_keras_model_safe(os.path.join(MODELS_DIR, 'mlp_hybrid.keras'))
+    model_pso = load_keras_model_safe(os.path.join(MODELS_DIR, 'mlp_pso.keras'))
     
     # Cargar estadísticas de entrenamiento
     stats_base = joblib.load(os.path.join(MODELS_DIR, 'mlp_base_stats.joblib'))
@@ -92,13 +137,15 @@ def evaluate_models():
     thresh_pso = joblib.load(os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib')) \
         if os.path.exists(os.path.join(MODELS_DIR, 'mlp_pso_threshold.joblib')) else 0.5
     
-    # Para el modelo base buscar threshold óptimo en test directamente
-    # (no tiene validation set propio en evaluate_models)
-    probs_base_thresh_search = model_base.predict(X_test, verbose=0).ravel()
+    # Para el modelo base buscar threshold óptimo en validación
+    # (garantiza que el set de test permanezca completamente aislado)
+    X_val_sel = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'X_val_selected.csv'))
+    y_val = pd.read_csv(os.path.join(PROCESSED_DATA_DIR, 'y_val.csv')).values.ravel()
+    probs_base_val = model_base.predict(X_val_sel, verbose=0).ravel()
     thresh_base, best_f1_base = 0.5, 0.0
     for t in np.arange(0.20, 0.81, 0.01):
-        p = (probs_base_thresh_search >= t).astype(int)
-        f = f1_score(y_test, p, average='macro', zero_division=0)
+        p = (probs_base_val >= t).astype(int)
+        f = f1_score(y_val, p, average='macro', zero_division=0)
         if f > best_f1_base:
             best_f1_base, thresh_base = f, t
             

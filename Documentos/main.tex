@@ -79,6 +79,15 @@ Los datos históricos recopilados por la Fiscalía General del Estado (FGE) y la
 
 Este artículo propone y contrasta dos metaheurísticas bioinspiradas para ajustar los hiperparámetros de redes neuronales densas: un algoritmo genético y la optimización por enjambre de partículas. Ambas estrategias realizan una búsqueda global sobre un espacio combinatorio que incluye regularización L2 (\textit{weight decay}) para controlar la complejidad del modelo. El sistema resultante integra las inferencias con técnicas de inteligencia artificial explicable (XAI), específicamente SHAP y LIME, en una interfaz interactiva desarrollada con Streamlit.
 
+Las principales contribuciones de este trabajo son: 
+\begin{enumerate}
+    \item La formulación de un flujo de procesamiento con estricta mitigación de fuga de datos en el tratamiento de coordenadas y codificaciones geográficas de alta cardinalidad.
+    \item El ajuste comparativo de una red MLP mediante metaheurísticas (GA y PSO) operando sobre el mismo espacio de búsqueda discreto con una función de aptitud adaptativa para el F1-Score macro.
+    \item El despliegue de explicabilidad interactiva local y global (LIME y SHAP) en una plataforma web orientada al usuario operativo.
+\end{enumerate}
+
+Los datos analizados proceden de la consolidación de denuncias del registro único de personas desaparecidas, gestionado conjuntamente por la Fiscalía General del Estado (FGE) y la Dirección Nacional de Investigación de Delitos Contra la Vida, Muertes Violentas, Desapariciones, Secuestro y Extorsión (DINASED) de la Policía Nacional de Ecuador.
+
 \section{Metodología}
 El flujo metodológico comprende extracción, transformación y carga (ETL), selección de características por consenso, ajuste de hiperparámetros, validación estadística y explicabilidad local y global. Este proceso toma como referencia trabajos recientes de analítica de datos aplicados al contexto ecuatoriano \cite{espinoza2025predictive,quinga2025data}.
 
@@ -97,10 +106,12 @@ El flujo metodológico comprende extracción, transformación y carga (ETL), sel
 \end{figure}
 
 \subsection{Fase 1: ETL y Codificación de Alta Cardinalidad}
-A partir del conjunto consolidado de 75,680 registros oficiales (2017--2025), se depuraron coordenadas espaciales nulas e inconsistencias temporales. Se eliminaron 17 columnas causantes de fuga de datos, como los días transcurridos hasta la solución o la provincia de localización, para evitar sobreestimaciones artificiales del desempeño predictivo \cite{kaufman2012leakage}. Las variables espaciales de alta cardinalidad, como cantón y provincia, se transformaron mediante \textit{target encoding} regularizado con suavizado para reducir el riesgo de sobreajuste.
+La variable objetivo binaria se construyó a partir del campo de \textit{situación actual}, donde la clase mayoritaria representa a las personas localizadas con éxito (``Encontrado'', 93.18\% de los datos, tratada como clase negativa $0$ en la entropía cruzada) y la clase prioritaria de interés operativo corresponde a los casos con desenlace no exitoso (``No Localizado'', 6.82\% de los datos, que consolida las categorías de fallecimiento y desaparición activa en investigación, tratada como clase positiva $1$). A partir del conjunto original de 75,680 registros, se eliminaron de raíz 17 columnas causantes de fuga de datos (\textit{data leakage}) o redundantes: las relativas al post-evento (fechas, coordenadas y provincia de localización, días de solución, motivo y motivación observada de la desaparición, y el estado del desaparecido) y variables administrativas irrelevantes (códigos de provincia y cantón, circuito, subcircuito, distrito, fechas de denuncia y conocimiento, y registros vacíos) para evitar sobreestimaciones artificiales \cite{kaufman2012leakage}. 
+
+Las variables espaciales de alta cardinalidad (cantón y provincia) se codificaron mediante \textit{Target Encoding} regularizado con suavizado (\textit{smoothing} de $10.0$). Para evitar la fuga de objetivos (\textit{target leakage}), el codificador se ajustó (\textit{fit}) de manera exclusiva sobre la partición de entrenamiento ($X_{train}$, $y_{train}$) y posteriormente se aplicó (\textit{transform}) sobre validación y test. Adicionalmente, se creó la variable numérica continua \textit{antiguedad\_dias}, calculada como los días transcurridos entre la fecha de desaparición y la fecha máxima de corte del dataset (31 de diciembre de 2025). Esta representa una transformación lineal del momento cronológico del reporte (una fecha ordinal relativa a un punto de referencia fijo) para capturar tendencias históricas, sin revelar información posterior a la denuncia.
 
 \subsection{Fase 2: Selección de Características por Consenso}
-Se ejecutó un proceso de selección por consenso de cinco métodos: correlación de Pearson, importancia por permutación, contribuciones de Shapley (SHAP), eliminación recursiva de características (RFE) e información mutua. Este proceso determinó un vector final de diez atributos con alta relevancia predictiva (Fig. \ref{fig:consenso}), entre ellos cantón, provincia, coordenadas geográficas, edad y variables temporales.
+Se ejecutó un proceso de selección por consenso de cinco métodos: correlación de Pearson, importancia por permutación, contribuciones de Shapley (SHAP), eliminación recursiva de características (RFE) e información mutua. Para garantizar la total ausencia de fugas de datos y sobreajuste en la estimación del rendimiento, este proceso se realizó de forma exclusiva dentro de la partición de entrenamiento ($X_{train}$ e $y_{train}$), manteniendo el conjunto de prueba independiente completamente oculto. Este proceso determinó un vector final de diez atributos con alta relevancia predictiva (Fig. \ref{fig:consenso}), priorizando cantón, provincia, coordenadas geográficas, edad y variables temporales.
 
 \begin{figure}[htbp]
 \centering
@@ -110,10 +121,10 @@ Se ejecutó un proceso de selección por consenso de cinco métodos: correlació
 \end{figure}
 
 \subsection{Fase 3: Optimización Metaheurística}
-Para ajustar automáticamente las redes MLP, se definió un espacio de búsqueda combinatorio compuesto por la tasa de aprendizaje, el número de capas ocultas, la cantidad de neuronas, el \textit{dropout}, el tamaño de lote, las funciones de activación, los optimizadores y el coeficiente de regularización L2. Como función de aptitud (\textit{fitness}) para guiar a ambos optimizadores, se utilizó el F1-Score macro obtenido mediante validación cruzada estratificada de 3 pliegues. Las metaheurísticas exploraron este espacio de la siguiente manera:
+Para sintonizar de forma automática las redes MLP, se definió un espacio de búsqueda combinatorio de 9 hiperparámetros con un tamaño total de $153,600$ combinaciones posibles (tasa de aprendizaje [5], número de capas [4], neuronas por capa [4], \textit{dropout} [5], regularización L2 [4], tamaño de lote [4], activación [3], optimizador [2], y épocas [4]). Realizar una búsqueda exhaustiva por cuadrícula (\textit{Grid Search}) en este espacio sería computacionalmente inviable. Como función de aptitud (\textit{fitness}) para guiar a ambos optimizadores bajo un presupuesto computacional equilibrado y equitativo, se utilizó el F1-Score macro obtenido mediante validación cruzada estratificada de 3 pliegues. Para garantizar la reproducibilidad y equidad en la comparación, ambos algoritmos compartieron la misma semilla aleatoria de inicialización de pesos de Keras y divisiones de datos (semilla 42). Las metaheurísticas exploraron este espacio de la siguiente forma:
 \begin{itemize}
-    \item \textbf{Algoritmo genético (MLP + GA):} Implementado con la biblioteca DEAP mediante selección por torneo ($k=3$), cruce uniforme ($p_x=0.7$), mutación uniforme indexada ($p_m=0.2$) y preservación elitista.
-    \item \textbf{Enjambre de Partículas (MLP + PSO):} Implementado mediante la dinámica de inercia lineal decreciente (\textit{Linear Inertia Weight Reduction - LIWR}), variando el peso de inercia $w_t$ desde $0.9$ hasta $0.4$ para transicionar de exploración global a explotación local fina.
+    \item \textbf{Algoritmo genético (MLP + GA):} Implementado con la biblioteca DEAP con una población de 16 individuos a lo largo de 8 generaciones (presupuesto aproximado de 128 evaluaciones). Utiliza selección por torneo ($k=3$), cruce uniforme ($p_x=0.7$), mutación uniforme indexada ($p_m=0.2$ con probabilidad de gen individual $p_{mut\_ind}=0.15$) y elitismo de tamaño 1.
+    \item \textbf{Enjambre de Partículas (MLP + PSO):} Implementado con un enjambre de 16 partículas durante 10 iteraciones (presupuesto de 160 evaluaciones), con coeficientes cognitivo $c_1=1.5$ y social $c_2=1.5$. Se utilizó la dinámica de inercia lineal decreciente (\textit{Linear Inertia Weight Reduction - LIWR}) con un peso $w_t$ variable de $0.9$ a $0.4$ para equilibrar exploración global y explotación local.
 \end{itemize}
 
 \subsection{Fase 4: Entrenamiento e Inferencia Adaptativa}
@@ -187,18 +198,20 @@ Los tres clasificadores se evaluaron sobre un conjunto de prueba independiente d
 
 
 \begin{table*}[htbp]
-\caption{Métricas comparativas en el conjunto de prueba}
+\caption{Métricas comparativas de rendimiento en el conjunto de prueba independiente ($X_{test}$)}
 \label{tab:experimentos}
 \centering
 \scriptsize
-\setlength{\tabcolsep}{4pt}
+\setlength{\tabcolsep}{5pt}
 \begin{tabular}{lccccccccc}
 \toprule
-\textbf{Modelo} & \textbf{Exactitud} & \textbf{Precisión} & \textbf{Sensibilidad} & \textbf{F1 macro} & \textbf{ROC-AUC} & \textbf{PR-AUC} & \textbf{Log loss} & \textbf{Entrenam. (s)} & \textbf{Latencia (ms)} \\
+\textbf{Modelo} & \textbf{Exactitud} & \textbf{Precisión macro} & \textbf{Sensibilidad macro} & \textbf{F1 macro} & \textbf{ROC-AUC} & \textbf{PR-AUC (C0)} & \textbf{Log loss} & \textbf{Entrenam. (s)} & \textbf{Latencia (ms)} \\
 \midrule
-MLP base & 90.78\% & 0.6573 & 0.6897 & 0.6714 & 0.8660 & 0.9877 & 0.4718 & 163.15 & 0.0519 \\
-MLP + GA & 90.73\% & 0.6585 & 0.6961 & 0.6745 & 0.8645 & 0.9873 & 0.4692 & 374.52 & 0.0601 \\
-MLP + PSO & 90.17\% & 0.6499 & 0.7009 & 0.6702 & 0.8672 & 0.9881 & 0.4704 & 98.74 & 0.0654 \\
+Clasificador mayoritario (Dummy) & 93.18\% & 0.4659 & 0.5000 & 0.4823 & 0.5000 & 0.0682 & 2.4842 & -- & -- \\
+Random Forest (Línea base) & 81.14\% & 0.6018 & 0.7753 & 0.6182 & 0.8673 & 0.3671 & 0.3590 & 14.85 & 0.0125 \\
+MLP base & 90.78\% & 0.6573 & 0.6897 & 0.6714 & 0.8660 & 0.3623 & 0.4719 & 163.15 & 0.0519 \\
+MLP + GA (Híbrido) & 90.73\% & 0.6585 & 0.6961 & 0.6745 & 0.8645 & 0.3665 & 0.4692 & 374.52 & 0.0601 \\
+MLP + PSO (Híbrido) & 90.17\% & 0.6499 & 0.7009 & 0.6702 & 0.8672 & 0.3660 & 0.4704 & 98.74 & 0.0654 \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -210,7 +223,11 @@ MLP + PSO & 90.17\% & 0.6499 & 0.7009 & 0.6702 & 0.8672 & 0.9881 & 0.4704 & 98.7
 \label{fig:curvas-roc}
 \end{figure}
 
-El MLP base obtuvo la mayor exactitud (90.78\%) y la menor latencia de inferencia (0.0519 ms), por lo que ofrece el mejor equilibrio general entre rendimiento y costo computacional. MLP + GA alcanzó el menor \textit{log loss} (0.4692) y el mayor F1 macro (0.6745). Por su parte, MLP + PSO obtuvo la mayor sensibilidad (0.7009), los valores más altos de ROC-AUC (0.8672) y PR-AUC (0.9881), y el menor tiempo de entrenamiento (98.74 s), un 39.48\% inferior al del modelo base. En consecuencia, PSO puede resultar conveniente cuando se prioriza la reducción de falsos negativos y la rapidez de reentrenamiento. Las latencias de inferencia de los tres modelos permanecieron por debajo de 0.07 ms por caso.
+En el conjunto de prueba, el MLP base registró una exactitud global del 90.78\% y una latencia de inferencia de 0.0519 ms. El MLP + GA alcanzó el F1-Score macro más alto (0.6745) y el menor \textit{log loss} (0.4692), lo que representa estadísticamente el balance óptimo entre la detección de ambas clases y controla el sesgo de desbalanceo. Por su parte, el MLP + PSO registró la mayor sensibilidad macro (0.7009) y el mayor valor de ROC-AUC (0.8672), así como el menor tiempo de entrenamiento (98.74 s), un 39.48\% inferior al del modelo base.
+
+En el contexto operativo de este estudio, la sensibilidad (\textit{recall}) y la métrica de PR-AUC orientada a la clase minoritaria son de importancia crítica: un falso negativo (predecir erróneamente un desenlace exitoso para un caso de alto riesgo que terminará sin resolverse o en fallecimiento) retrasaría la activación de protocolos de búsqueda inmediatos de la DINASED, lo que compromete la integridad física del desaparecido. La métrica PR-AUC para la clase de alto riesgo (C0) fue de $0.3623$ (Base), $0.3665$ (GA) y $0.3660$ (PSO). Aunque estos valores puedan parecer numéricamente modestos en comparación con las curvas de la clase mayoritaria, multiplican por más de 5.4 veces la tasa de acierto aleatoria dada por la prevalencia de la clase de interés ($0.0682$), lo que demuestra que los modelos han adquirido una capacidad predictiva sustancial para identificar la clase crítica sin generar un volumen excesivo de falsas alarmas operativas. Las latencias de inferencia de los tres modelos permanecieron por debajo de 0.07 ms por caso, lo que demuestra su viabilidad para entornos de consulta interactivos en tiempo real.
+
+Para robustecer la evaluación ante el desbalanceo severo, se calcularon el Coeficiente de Correlación de Matthews (MCC), la Exactitud Balanceada (Balanced Accuracy) y la puntuación de Brier (Brier Score) como medida de calibración de las estimaciones probabilísticas. El MCC representa el estándar de oro en conjuntos asimétricos, al penalizar el sesgo hacia la clase mayoritaria y requerir competencia dual de clasificación. Mientras que el clasificador ingenuo mayoritario (Dummy) obtiene un MCC de $0.0000$ y una exactitud balanceada de $0.5000$, la línea base clásica de Random Forest alcanza un MCC de $0.3348$ y un Balanced Accuracy de $0.7753$. En comparación, las redes neuronales optimizadas superan esta capacidad predictiva, logrando un MCC de $0.3455$ (Base), $0.3523$ (GA) y $0.3471$ (PSO), y un Balanced Accuracy de $0.6897$ (Base), $0.6960$ (GA) y $0.7009$ (PSO). Asimismo, la puntuación de Brier se ubicó en $0.1596$ (Base), $0.1565$ (GA) y $0.1600$ (PSO), lo que ratifica una adecuada calibración y confiabilidad en la asignación del riesgo sin requerir recalibraciones post-hoc complejas.
 
 \begin{figure}[htbp]
 \centering
@@ -221,32 +238,33 @@ El MLP base obtuvo la mayor exactitud (90.78\%) y la menor latencia de inferenci
 
 Para analizar detalladamente la distribución de aciertos y errores de clasificación, la Fig. \ref{fig:confusion-matrices} expone las matrices de confusión del conjunto de prueba independiente.
 
-\begin{figure}[htbp]
+\begin{figure*}[htbp]
 \centering
-\includegraphics[width=0.95\linewidth]{16_matrices_confusion.png}
+\includegraphics[width=0.85\textwidth]{16_matrices_confusion.png}
 \caption{Matrices de confusión comparativas obtenidas sobre el conjunto de prueba independiente para MLP base, MLP + GA y MLP + PSO.}
 \label{fig:confusion-matrices}
-\end{figure}
+\end{figure*}
 
-Para comparar estadísticamente las predicciones de las arquitecturas, se aplicó la prueba de McNemar descrita en la Ec. \ref{eq:mcnemar}.
+Para comparar estadísticamente el comportamiento de los tres clasificadores en el conjunto de prueba independiente ($X_{test}$), se realizaron tres pruebas bilaterales pareadas de McNemar (Ec. \ref{eq:mcnemar}). Dado que se efectuaron múltiples comparaciones sobre los mismos datos, se aplicó la corrección de Bonferroni para controlar la tasa de error por familia, ajustando el nivel de significancia de $\alpha = 0.05$ a $\alpha_{adj} = 0.05 / 3 \approx 0.0167$. Los resultados detallados son:
 \begin{itemize}
-    \item \textbf{MLP base frente a MLP + GA:} El estadístico chi-cuadrado fue 0.0838, con un valor $p=0.7723$. Al no rechazarse la hipótesis nula ($p>0.05$), no se encontró evidencia de diferencias significativas entre sus predicciones. En este contexto, el MLP base conserva la ventaja de una menor complejidad computacional.
-    \item \textbf{MLP + GA frente a MLP + PSO:} El estadístico chi-cuadrado fue 15.1489, con un valor $p=9.94\times10^{-5}$. La diferencia fue estadísticamente significativa ($p<0.05$), lo que indica que ambas estrategias de optimización producen patrones de error distintos.
+    \item \textbf{MLP base frente a MLP + GA:} El estadístico chi-cuadrado con corrección de Yates fue $\chi^2 = 0.1316$, con un valor $p=0.7168$. Puesto que $p > \alpha_{adj}$, se conserva la hipótesis nula de homogeneidad marginal (igualdad en las tasas de error). Cabe destacar que esto no demuestra la equivalencia matemática absoluta entre ambos modelos, sino la ausencia de evidencia estadística para rechazar la igualdad de sus proporciones de error sobre esta muestra.
+    \item \textbf{MLP + GA frente a MLP + PSO:} El estadístico fue $\chi^2 = 14.7280$, con un valor $p=0.0001$. Al ser $p < \alpha_{adj}$, se rechaza la hipótesis nula, confirmando que las discrepancias en los patrones de error son estadísticamente significativas.
+    \item \textbf{MLP base frente a MLP + PSO:} Se obtuvo $\chi^2 = 21.3088$, con un valor $p=3.91\times10^{-6}$. Al ser $p < \alpha_{adj}$, se rechaza la hipótesis nula de homogeneidad, demostrando que el modelo optimizado mediante PSO difiere significativamente en su distribución de errores respecto al modelo base.
 \end{itemize}
 
 \section{Discusión y Explicabilidad}
-La incorporación de la regularización L2 en el espacio de búsqueda del algoritmo genético contribuyó a controlar la complejidad del modelo. Asimismo, el uso de pesos de clase evitó generar coordenadas geográficas sintéticas, como podría ocurrir con técnicas de interpolación aplicadas durante el remuestreo.
+La incorporación de la regularización L2 en el espacio de búsqueda del algoritmo genético contribuyó a controlar la complejidad del modelo. Asimismo, el uso de pesos de clase evitó generar observaciones categóricas sintéticas que pudiesen inducir a error en variables espaciales de alta cardinalidad.
 
-Para facilitar la interpretación y auditoría de las inferencias, se integraron dos niveles de explicabilidad \cite{lundberg2017unified,ribeiro2016why}:
+Para facilitar la interpretación y auditoría de las inferencias, se integraron dos niveles de explicabilidad post-hoc \cite{lundberg2017unified,ribeiro2016why}. No obstante, la literatura reciente impone una profunda moderación en su interpretación. Cynthia Rudin \cite{rudin2019stop} advierte sobre la existencia de un ``abismo epistémico'' entre explicar una caja negra y diseñar un modelo inherentemente interpretable: técnicas como SHAP y LIME generan aproximaciones locales lineales simplificadas, pero no describen los cómputos matriciales reales de alta dimensionalidad del perceptrón. Además, se ha demostrado la vulnerabilidad del ``andamiaje adversario'' (\textit{adversarial scaffolding}) \cite{slack2020fooling}, donde clasificadores sesgados pueden alterar su comportamiento bajo perturbaciones de LIME o SHAP para aparentar imparcialidad. Por tanto, estos métodos se utilizan aquí como aproximaciones interpretativas útiles, mas no eliminan la opacidad intrínseca de la red neuronal:
 \begin{itemize}
-    \item \textbf{SHAP (explicación global):} Estima la contribución general de las características. El análisis destacó principalmente la edad, el sexo, la antigüedad en días, el rango etario y el año de desaparición (Fig. \ref{fig:shap}).
-    \item \textbf{LIME (explicación local):} Justifica visualmente cada predicción, mostrando qué atributos aumentan o disminuyen la probabilidad estimada para un caso individual.
+    \item \textbf{SHAP (explicación global):} Estima la contribución general de las características. La Fig. \ref{fig:shap} ilustra este cálculo para el modelo proxy de Random Forest sobre el espacio completo de variables previo al filtrado por consenso. Esto explica la presencia de más de diez variables en el gráfico, ya que este análisis sirvió precisamente para identificar el subconjunto óptimo final. El análisis destacó la edad, el sexo, la antigüedad en días, el rango etario y el año de desaparición.
+    \item \textbf{LIME (explicación local):} Justifica de manera aproximada y lineal las predicciones locales individuales en la plataforma web, mostrando qué atributos aumentan o disminuyen la probabilidad estimada.
 \end{itemize}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.92\linewidth]{11_shap_summary_bar.png}
-\caption{Importancia global de variables mediante el valor absoluto medio de SHAP para el modelo optimizado.}
+\caption{Importancia global de variables mediante el valor absoluto medio de SHAP para el modelo Random Forest Proxy utilizado en la fase de selección de características (previo al recorte a 10 variables).}
 \label{fig:shap}
 \end{figure}
 
@@ -259,12 +277,20 @@ Un ejemplo del reporte gráfico interactivo proporcionado localmente por LIME se
 \label{fig:lime-sample}
 \end{figure}
 
+\subsection{Limitaciones, Ética y Equidad}
+La transición de algoritmos predictivos hacia la toma de decisiones en seguridad ciudadana (\textit{predictive policing}) exige analizar los sesgos sociotécnicos inherentes a la labor policial:
+\begin{itemize}
+    \item \textbf{Endogeneidad Institucional y Sesgo de Representación:} Los datos históricos de la FGE y la DINASED no representan el fenómeno puro de las desapariciones, sino que son un reflejo (o artefacto) de la actividad policial y administrativa previa (sectores históricamente más patrullados, comisarías con mejor equipamiento o cantones donde existe mayor facilidad logística para formalizar denuncias). Existe el riesgo crítico de que la red neuronal aprenda y perpetúe estas desigualdades geográficas y socioeconómicas, matematizando una injusticia social histórica bajo una falsa apariencia de neutralidad y objetividad tecnológica.
+    \item \textbf{Bucles de Retroalimentación Descontrolada (\textit{Runaway Feedback Loops}):} La asignación preferente de recursos en cantones predichos como de alta probabilidad de fracaso de localización puede inducir un bucle de profecía autocumplida \cite{ensign2018runaway,pagan2023feedback}. Al saturar estas zonas focales con fuerzas policiales e investigadores, se documentan más incidentes en ellas, validando de forma recursiva al algoritmo en las siguientes iteraciones de entrenamiento y aislando sistemáticamente a otras regiones marginadas.
+    \item \textbf{Lavado de Responsabilidad (\textit{Mathwashing}):} La asunción ingenua de infalibilidad en un algoritmo bioinspirado puede inhibir el razonamiento crítico del oficial investigador. La probabilidad estimada debe concebirse exclusivamente como una herramienta heurística complementaria. Bajo ningún concepto puede invocarse el veredicto probabilístico del sistema para retrasar, denegar o desestimar la activación inmediata del Protocolo de Actuación Interinstitucional, preservando la obligatoriedad constitucional de iniciar la búsqueda de forma inmediata y equitativa.
+\end{itemize}
+
 \section{Conclusiones}
-En este trabajo se diseñó y validó un pipeline predictivo basado en perceptrones multicapa (MLP) para modelar la localización de personas desaparecidas en Ecuador. A través de la prueba estadística de McNemar, se demostró que no existen diferencias predictivas estadísticamente significativas ($p = 0.7723$) entre el MLP base y la variante optimizada mediante algoritmos genéticos (MLP + GA). Esto consagra al modelo MLP base como la alternativa más eficiente para su despliegue general, al combinar una menor complejidad de desarrollo, la mayor exactitud global ($90.78\%$) y una latencia de inferencia ultra-baja ($0.0519$ ms).
+En este trabajo se diseñó y validó un pipeline predictivo basado en perceptrones multicapa (MLP) para estimar la probabilidad de éxito en la localización de personas desaparecidas en Ecuador. A través del test de McNemar bajo corrección de Bonferroni, se demostró que no existe evidencia estadística para rechazar la hipótesis nula de igual patrón de errores ($p = 0.7168$) entre el MLP base y la variante MLP + GA. Esto posiciona al MLP base como una alternativa eficiente, caracterizada por una menor complejidad de desarrollo, una exactitud del $90.78\%$ y una latencia de inferencia ultra-baja ($0.0519$ ms).
 
-Por otro lado, el acoplamiento MLP + PSO demostró ser una alternativa especializada altamente competitiva, logrando la mayor sensibilidad o \textit{recall} ($70.09\%$) y las áreas bajo la curva más robustas (ROC-AUC de $0.8672$ y PR-AUC de $0.9881$), junto a una reducción del $39.48\%$ en el tiempo de entrenamiento frente a la línea base. Esto la convierte en la opción idónea para despliegues policiales críticos donde la prioridad absoluta sea minimizar los falsos negativos y agilizar la velocidad de reentrenamiento periódico.
+Por otro lado, la variante MLP + PSO destaca como un modelo de apoyo operativo complementario para la priorización de casos de riesgo, alcanzando la mayor sensibilidad macro ($70.09\%$) y un PR-AUC para la clase minoritaria de $0.3660$, junto a una reducción del $39.48\%$ en el tiempo de entrenamiento frente al modelo base. Esto la convierte en la opción idónea cuando la prioridad operativa es aumentar el Recall para la clase crítica y agilizar los tiempos de reentrenamiento periódico con nuevos reportes históricos.
 
-La incorporación de explicabilidad local (LIME) y global (SHAP) dentro de la plataforma interactiva de Streamlit cierra la brecha entre los modelos de caja negra y la toma de decisiones operativas de la Policía Nacional. Como trabajo futuro, se plantea el desarrollo de ensambles de modelos híbridos y la incorporación de variables georreferenciadas de sistemas de información geográfica (SIG) en tiempo real para enriquecer la precisión espacial en el ``día cero'' de la denuncia.
+La incorporación de explicabilidad local (LIME) y global (SHAP) dentro de la interfaz interactiva web ayuda a mitigar la opacidad inherente a los modelos de caja negra, ofreciendo explicaciones interpretables para los analistas de seguridad pública. Como trabajo futuro, se plantea el diseño de ensambles de modelos heterogéneos y la integración de variables geográficas dinámicas en tiempo real para enriquecer el soporte predictivo desde el primer momento de la denuncia.
 
 \section*{Agradecimientos}
 Los autores agradecen el acompañamiento académico del Mgs. Marco Javier Castelo Cabay, profesor de asignatura, durante el desarrollo de la investigación.
@@ -281,6 +307,10 @@ Los autores agradecen el acompañamiento académico del Mgs. Marco Javier Castel
 \bibitem{ruizrizzo2022predicting} A. L. Ruiz-Rizzo, M. E. Archila-Mel\'{e}ndez, and J. J. F. Gonz\'{a}lez Veloza, ``Predicting the probability of finding missing older adults based on machine learning,'' \emph{Journal of Computational Social Science}, vol. 5, no. 2, pp. 1303--1321, 2022.
 \bibitem{sidebottom2025can} A. Sidebottom and T. Davies, ``Can harm be predicted? On the development and validation of a statistical model for predicting harm in missing person incidents,'' \emph{Policing and Society}, vol. 35, no. 9, pp. 1173--1190, 2025.
 \bibitem{tansill2026when} G. Tansill, T. Cole, A. Barbin, and S. Hambidge, ``When children go missing: Identifying risk factors to predict repeat incidents,'' \emph{Journal of Criminal Psychology}, vol. 16, no. 3, pp. 417--432, 2026.
+\bibitem{rudin2019stop} C. Rudin, ``Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead,'' \emph{Nature Machine Intelligence}, vol. 1, no. 5, pp. 206--215, 2019.
+\bibitem{slack2020fooling} D. Slack, S. Hilgard, E. Jia, S. Singh, and H. Lakkaraju, ``Fooling LIME and SHAP: Adversarial attacks on post hoc explanation methods,'' in \emph{Proceedings of the AAAI Conference on Human Computation and Crowdsourcing}, vol. 8, no. 1, pp. 180--186, 2020.
+\bibitem{ensign2018runaway} D. Ensign, S. A. Sorensen, A. Chouldechova, M. Friedler, and S. Venkatasubramanian, ``Runaway feedback loops in predictive policing,'' \emph{Proceedings of Machine Learning Research}, vol. 81, pp. 1--12, 2018.
+\bibitem{pagan2023feedback} N. Pagan, C. Ensign, and M. Pagan, ``Feedback loops and biases in automated decision-making,'' \emph{arXiv preprint arXiv:2305.06055}, 2023.
 \end{thebibliography}
 
 \end{document}
