@@ -128,12 +128,62 @@ print()
 GPU_STATUS=$?
 echo "----------------------------------------------------------"
 
+# ─── Función auxiliar: instalar y configurar ngrok ──────────────────────────
+setup_ngrok() {
+    # Instalar ngrok si no está disponible
+    if ! command -v ngrok &> /dev/null; then
+        echo "[NGROK] ngrok no encontrado. Instalando..."
+        if command -v snap &> /dev/null; then
+            sudo snap install ngrok
+        else
+            curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+                | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+            echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+                | sudo tee /etc/apt/sources.list.d/ngrok.list
+            sudo apt update -qq && sudo apt install ngrok -y -qq
+        fi
+        if ! command -v ngrok &> /dev/null; then
+            echo "[ERROR] No se pudo instalar ngrok automáticamente."
+            echo "        Instálalo manualmente desde: https://ngrok.com/download"
+            return 1
+        fi
+        echo "[NGROK] ✓ ngrok instalado."
+    fi
+
+    # Guardar el authtoken de forma persistente en el proyecto
+    NGROK_TOKEN_FILE="$ENV_DIR/.ngrok_token"
+    if [ ! -f "$NGROK_TOKEN_FILE" ]; then
+        echo ""
+        echo "┌─────────────────────────────────────────────────────────┐"
+        echo "│  Para compartir el proyecto necesitas un authtoken de   │"
+        echo "│  ngrok (gratuito).                                      │"
+        echo "│  Regístrate en: https://dashboard.ngrok.com/signup      │"
+        echo "│  Luego copia tu token en: https://dashboard.ngrok.com/  │"
+        echo "│                           get-started/your-authtoken    │"
+        echo "└─────────────────────────────────────────────────────────┘"
+        read -p "Pega tu ngrok authtoken aquí: " NGROK_TOKEN
+        if [ -z "$NGROK_TOKEN" ]; then
+            echo "[ERROR] Token vacío. No se puede continuar."
+            return 1
+        fi
+        echo "$NGROK_TOKEN" > "$NGROK_TOKEN_FILE"
+        chmod 600 "$NGROK_TOKEN_FILE"
+    else
+        NGROK_TOKEN=$(cat "$NGROK_TOKEN_FILE")
+    fi
+
+    ngrok config add-authtoken "$NGROK_TOKEN" --quiet 2>/dev/null || \
+    ngrok authtoken "$NGROK_TOKEN" 2>/dev/null
+    return 0
+}
+
 # 5. Ofrecer opciones de ejecución
 echo "Selecciona una opción para ejecutar:"
 echo "1) Ejecutar el pipeline completo de ciencia de datos (main.py)"
 echo "2) Lanzar la aplicación web interactiva (Streamlit)"
-echo "3) Salir"
-read -p "Opción [1-3]: " opt
+echo "3) Lanzar Streamlit + compartir con Ngrok (URL pública para compañeros)"
+echo "4) Salir"
+read -p "Opción [1-4]: " opt
 
 case $opt in
     1)
@@ -157,6 +207,62 @@ case $opt in
         streamlit run app/app.py
         ;;
     3)
+        echo "[WSL] Configurando Ngrok para compartir la app..."
+        setup_ngrok || exit 1
+
+        STREAMLIT_PORT=8501
+
+        echo ""
+        echo "[NGROK] Iniciando Streamlit en segundo plano (puerto $STREAMLIT_PORT)..."
+        streamlit run app/app.py \
+            --server.port $STREAMLIT_PORT \
+            --server.headless true \
+            --server.address 0.0.0.0 &
+        STREAMLIT_PID=$!
+
+        # Esperar a que Streamlit arranque
+        echo "[NGROK] Esperando que Streamlit esté listo..."
+        sleep 4
+
+        echo "[NGROK] Iniciando túnel público con ngrok..."
+        ngrok http $STREAMLIT_PORT &
+        NGROK_PID=$!
+
+        # Esperar un momento y mostrar la URL pública
+        sleep 3
+        echo ""
+        echo "┌──────────────────────────────────────────────────────────┐"
+        echo "│  ✓  App compartida. URL pública disponible en:           │"
+        echo "│     http://localhost:4040  →  pestaña 'Status' en ngrok  │"
+        echo "│                                                          │"
+        echo "│  Comparte ese enlace con tus compañeros.                 │"
+        echo "│  Presiona Ctrl+C para detener todo.                      │"
+        echo "└──────────────────────────────────────────────────────────┘"
+        echo ""
+
+        # Mostrar URL directamente si ngrok API está disponible
+        sleep 2
+        NGROK_URL=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null \
+            | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    tunnels = data.get('tunnels', [])
+    for t in tunnels:
+        if t.get('proto') == 'https':
+            print('  🔗 URL pública: ' + t['public_url'])
+            break
+except:
+    pass
+" 2>/dev/null)
+        [ -n "$NGROK_URL" ] && echo "$NGROK_URL" && echo ""
+
+        # Esperar a que el usuario interrumpa con Ctrl+C
+        trap "echo ''; echo '[NGROK] Deteniendo servicios...'; kill $STREAMLIT_PID $NGROK_PID 2>/dev/null; exit 0" INT TERM
+        wait $STREAMLIT_PID
+        kill $NGROK_PID 2>/dev/null
+        ;;
+    4)
         echo "Saliendo. Puedes volver a activar este entorno ejecutando: source $ENV_DIR/bin/activate"
         exit 0
         ;;
